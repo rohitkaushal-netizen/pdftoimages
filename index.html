@@ -1,0 +1,2666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PDF Extractor + Housing.com + Website + 99acres Scraper</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f5f6fa;
+      --surface: #ffffff;
+      --border: #e2e5ec;
+      --accent: #4f46e5;
+      --accent-h: #4338ca;
+      --text: #1e1f26;
+      --sub: #6b7280;
+      --danger: #ef4444;
+      --green: #22c55e;
+      --amber: #f59e0b;
+      --radius: 12px;
+    }
+
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    /* Header */
+    header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 32px; display: flex; align-items: center; gap: 12px; }
+    header svg { color: var(--accent); flex-shrink: 0; }
+    header h1 { font-size: 1.05rem; font-weight: 700; letter-spacing: -.3px; }
+    .hdr-badge { font-size: .7rem; font-weight: 700; background: #eef2ff; color: var(--accent); padding: 2px 8px; border-radius: 99px; letter-spacing: .3px; }
+    header span.hdr-info { font-size: .8rem; color: var(--sub); margin-left: auto; }
+
+    main { max-width: 1340px; margin: 0 auto; padding: 28px 24px; }
+
+    /* Mode switcher */
+    #mode-switcher { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 4px; width: fit-content; margin-bottom: 20px; }
+    .mode-tab { border: none; background: none; padding: 7px 18px; border-radius: 7px; font-size: .85rem; font-weight: 600; cursor: pointer; color: var(--sub); transition: background .15s, color .15s; }
+    .mode-tab.active { background: var(--accent); color: #fff; }
+    .mode-tab:not(.active):hover { background: var(--bg); color: var(--text); }
+
+    /* ── Upload Mode ──────────────────────────────────────────────────────── */
+    #drop-zone { background: var(--surface); border: 2px dashed var(--border); border-radius: var(--radius); padding: 56px 24px; text-align: center; cursor: pointer; transition: border-color .2s, background .2s; position: relative; }
+    #drop-zone.drag-over { border-color: var(--accent); background: #eef2ff; }
+    #drop-zone svg { color: var(--accent); margin-bottom: 12px; }
+    #drop-zone h2 { font-size: 1.05rem; margin-bottom: 6px; }
+    #drop-zone p { font-size: .85rem; color: var(--sub); }
+    #drop-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+    #progress-wrap { display: none; background: var(--surface); border-radius: var(--radius); padding: 20px 24px; margin-top: 16px; }
+    #progress-label { display: flex; justify-content: space-between; font-size: .82rem; color: var(--sub); margin-bottom: 8px; }
+    #progress-track { height: 8px; background: var(--border); border-radius: 99px; overflow: hidden; }
+    #progress-bar { height: 100%; width: 0%; background: var(--accent); border-radius: 99px; transition: width .3s ease; }
+
+    #stats-bar { display: none; align-items: center; gap: 16px; background: var(--surface); border-radius: var(--radius); padding: 14px 20px; margin-top: 16px; font-size: .88rem; }
+    #stats-bar .stat { display: flex; align-items: center; gap: 6px; }
+    #stats-bar .stat strong { font-size: 1.1rem; }
+    #stats-bar .divider { width: 1px; height: 24px; background: var(--border); }
+    #upload-another { margin-left: auto; background: none; border: 1px solid var(--border); border-radius: 8px; padding: 6px 14px; font-size: .82rem; cursor: pointer; color: var(--text); }
+    #upload-another:hover { background: var(--bg); }
+
+    #controls { display: none; background: var(--surface); border-radius: var(--radius); padding: 16px 20px; margin-top: 16px; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+    .ctrl-group { display: flex; flex-direction: column; gap: 4px; }
+    .ctrl-group label { font-size: .75rem; font-weight: 600; color: var(--sub); text-transform: uppercase; letter-spacing: .4px; }
+    .ctrl-group select, .ctrl-group input { height: 34px; border: 1px solid var(--border); border-radius: 8px; padding: 0 10px; font-size: .85rem; color: var(--text); background: var(--bg); min-width: 110px; }
+    .ctrl-group.dim-group { flex-direction: row; gap: 6px; align-items: flex-end; }
+    .ctrl-group.dim-group input { width: 80px; }
+    .ctrl-sep { font-size: .8rem; color: var(--sub); padding-bottom: 8px; }
+    #download-btns { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+
+    .btn { height: 34px; padding: 0 16px; border-radius: 8px; border: none; cursor: pointer; font-size: .83rem; font-weight: 600; display: flex; align-items: center; gap: 6px; transition: background .15s, transform .1s; }
+    .btn:active { transform: scale(.97); }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-h); }
+    .btn-outline { background: none; border: 1px solid var(--border); color: var(--text); }
+    .btn-outline:hover { background: var(--bg); }
+    .btn-sm { height: 28px; padding: 0 12px; font-size: .76rem; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .btn:disabled:hover { background: var(--accent); }
+    .btn-outline:disabled:hover { background: none; }
+
+    #gallery-header { display: none; justify-content: space-between; align-items: center; margin-top: 24px; margin-bottom: 12px; }
+    #gallery-header h3 { font-size: .95rem; font-weight: 700; }
+    #gallery-count { font-size: .82rem; color: var(--sub); }
+    #gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 16px; }
+
+    .img-card { background: var(--surface); border-radius: var(--radius); overflow: visible; border: 1px solid var(--border); transition: box-shadow .2s, transform .2s; display: flex; flex-direction: column; position: relative; }
+    .img-card:hover { box-shadow: 0 8px 24px rgba(0,0,0,.1); transform: translateY(-2px); }
+    .img-card.selected { outline: 2.5px solid var(--accent); outline-offset: 2px; border-radius: var(--radius); }
+    .img-thumb { aspect-ratio: 4/3; background: var(--bg); overflow: hidden; cursor: zoom-in; display: flex; align-items: center; justify-content: center; border-radius: var(--radius) var(--radius) 0 0; }
+    .img-thumb img { max-width: 100%; max-height: 100%; object-fit: contain; transition: transform .25s; }
+    .img-thumb:hover img { transform: scale(1.04); }
+    .img-body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 5px; flex: 1; }
+    .img-name { font-size: .78rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .img-meta { font-size: .72rem; color: var(--sub); display: flex; flex-wrap: wrap; gap: 4px; }
+    .badges { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 2px; }
+    .badge { font-size: .66rem; font-weight: 700; padding: 2px 7px; border-radius: 99px; text-transform: uppercase; letter-spacing: .4px; }
+    /* Image category badges */
+    .badge-photo         { background: #dcfce7; color: #15803d; }
+    .badge-elevation     { background: #e0f2fe; color: #0369a1; }
+    .badge-amenity       { background: #d1fae5; color: #065f46; }
+    .badge-model-flat    { background: #fef3c7; color: #92400e; }
+    .badge-kitchen       { background: #ffedd5; color: #c2410c; }
+    .badge-bedroom       { background: #fce7f3; color: #9d174d; }
+    .badge-living-room   { background: #ede9fe; color: #5b21b6; }
+    .badge-bathroom      { background: #e0e7ff; color: #3730a3; }
+    .badge-floor-plan    { background: #dbeafe; color: #1d4ed8; }
+    .badge-master-plan   { background: #e0f2fe; color: #075985; }
+    .badge-cluster-plan  { background: #cffafe; color: #155e75; }
+    .badge-location-plan { background: #d1fae5; color: #065f46; }
+    .badge-3d-render     { background: #ede9fe; color: #7c3aed; }
+    .badge-diagram       { background: #f1f5f9; color: #475569; }
+    .badge-unknown       { background: #f3f4f6; color: #6b7280; }
+    .badge-fmt           { background: #fef9c3; color: #854d0e; }
+    .card-dl { background: none; border: 1px solid var(--border); border-radius: 7px; padding: 5px 0; font-size: .75rem; cursor: pointer; color: var(--sub); display: flex; align-items: center; justify-content: center; gap: 5px; transition: background .15s, color .15s; flex: 1; }
+    .card-dl:hover { background: var(--bg); color: var(--text); }
+    .card-copy { background: none; border: 1px solid var(--border); border-radius: 7px; padding: 5px 0; font-size: .75rem; cursor: pointer; color: var(--sub); display: flex; align-items: center; justify-content: center; gap: 4px; transition: background .15s, color .15s; flex: 1; }
+    .card-copy:hover { background: #eef2ff; color: var(--accent); border-color: var(--accent); }
+    .card-actions { display: flex; gap: 5px; margin-top: auto; }
+
+    /* Unified card checkbox (all galleries) */
+    .card-check { position: absolute; top: 8px; left: 8px; z-index: 2; }
+    .card-check input[type=checkbox] { width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent); }
+
+    /* Source badge overlay */
+    .src-badge { position: absolute; top: 8px; right: 8px; z-index: 2; font-size: .62rem; font-weight: 800; padding: 2px 7px; border-radius: 99px; letter-spacing: .4px; text-transform: uppercase; pointer-events: none; }
+    .src-pdf    { background: #1d4ed8; color: #fff; }
+    .src-99ac   { background: #dc2626; color: #fff; }
+    .src-web    { background: #059669; color: #fff; }
+    .src-enrich { background: #7c3aed; color: #fff; }
+
+    /* Inline rename input */
+    .img-name-edit { font-size: .78rem; font-weight: 600; border: none; outline: none; background: transparent; width: 100%; padding: 0; cursor: text; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .img-name-edit:focus { background: #eef2ff; border-radius: 4px; padding: 1px 4px; color: var(--accent); }
+
+    /* Category dropdowns on card */
+    .cat-select { width: 100%; height: 26px; border: 1px solid var(--border); border-radius: 6px; font-size: .73rem; padding: 0 6px; background: var(--bg); color: var(--text); margin-top: 5px; cursor: pointer; }
+    .cat-select:focus { outline: none; border-color: var(--accent); }
+    .cat-select.cat-set { border-color: var(--accent); background: #eef2ff; color: var(--accent); font-weight: 600; }
+
+    /* Bulk selection bar (shared across all galleries) */
+    .gallery-bulk-bar { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; flex-wrap: wrap; margin-bottom: 12px; }
+    .gallery-bulk-bar .sel-count { font-size: .83rem; color: var(--accent); font-weight: 600; margin-left: 4px; }
+    .gallery-bulk-bar .bulk-actions { margin-left: auto; display: flex; gap: 8px; }
+
+    #empty-msg { display: none; text-align: center; padding: 48px 0; color: var(--sub); font-size: .9rem; }
+
+    /* ── PDF Crop Tool ────────────────────────────────────────────────────── */
+    .crop-tool-wrap { display: flex; flex-direction: column; gap: 14px; }
+    #crop-load-bar { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; flex-wrap: wrap; }
+    #crop-pdf-name { font-size: .85rem; color: var(--sub); }
+    .crop-layout { display: grid; grid-template-columns: 1fr 340px; gap: 16px; align-items: start; }
+    .crop-canvas-wrap { position: relative; background: #1a1a2e; border-radius: var(--radius); overflow: auto; display: flex; align-items: center; justify-content: center; min-height: 500px; }
+    #crop-canvas { display: block; }
+    #crop-overlay { position: absolute; top: 0; left: 0; cursor: crosshair; }
+    #crop-hint { position: absolute; color: rgba(255,255,255,.4); font-size: .9rem; pointer-events: none; text-align: center; padding: 20px; }
+    .crop-panel { display: flex; flex-direction: column; gap: 14px; }
+    .crop-panel-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
+    .crop-panel-section h3 { font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--sub); margin-bottom: 12px; }
+    .crop-label-row { display: flex; flex-direction: column; gap: 5px; font-size: .85rem; font-weight: 600; margin-bottom: 10px; }
+    .crop-label-row select { height: 36px; border: 1px solid var(--border); border-radius: 8px; padding: 0 10px; font-size: .85rem; background: var(--bg); color: var(--text); }
+    .crop-instructions { font-size: .78rem; color: var(--sub); line-height: 1.55; margin-top: 6px; }
+    .crop-queue-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .crop-queue-header h3 { margin-bottom: 0; }
+    #crop-queue-count { font-size: .78rem; color: var(--accent); font-weight: 600; margin-left: 6px; }
+    #crop-queue-list { display: flex; flex-direction: column; gap: 10px; max-height: 380px; overflow-y: auto; }
+    #crop-queue-empty { text-align: center; padding: 28px 0; color: var(--sub); font-size: .83rem; }
+    .crop-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px; background: var(--bg); border-radius: 8px; border: 1px solid var(--border); }
+    .crop-item img { width: 72px; height: 54px; object-fit: cover; border-radius: 5px; flex-shrink: 0; border: 1px solid var(--border); }
+    .crop-item-info { flex: 1; min-width: 0; }
+    .crop-item-meta { font-size: .73rem; color: var(--sub); margin-bottom: 4px; }
+    .crop-item-del { background: none; border: none; color: var(--sub); cursor: pointer; font-size: 1.1rem; padding: 0 2px; line-height: 1; flex-shrink: 0; }
+    .crop-item-del:hover { color: #ef4444; }
+    .crop-item-info .cat-select { width: 100%; margin-top: 4px; }
+    .crop-push-bar { display: flex; align-items: center; justify-content: space-between; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; }
+    #crop-push-status { font-size: .83rem; color: var(--sub); }
+
+    /* Location highlights */
+    .location-list { display: flex; flex-direction: column; gap: 6px; }
+    .location-item { font-size: .85rem; display: flex; gap: 8px; align-items: flex-start; }
+    .location-item::before { content: "📍"; flex-shrink: 0; }
+
+    /* ── Website Scraper Mode ─────────────────────────────────────────────── */
+    /* Result tabs */
+    .ws-tabs { display: flex; gap: 2px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 4px; width: fit-content; margin-top: 20px; margin-bottom: 0; flex-wrap: wrap; }
+    .ws-tab { border: none; background: none; padding: 7px 16px; border-radius: 7px; font-size: .83rem; font-weight: 600; cursor: pointer; color: var(--sub); transition: background .15s, color .15s; white-space: nowrap; }
+    .ws-tab.active { background: var(--accent); color: #fff; }
+    .ws-tab:not(.active):hover { background: var(--bg); color: var(--text); }
+    .ws-tab-content { display: none; }
+    .ws-tab-content.show { display: block; }
+
+    /* Documents */
+    .doc-list { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+    .doc-item { display: flex; align-items: center; gap: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; }
+    .doc-icon { font-size: 1.4rem; flex-shrink: 0; }
+    .doc-info { flex: 1; min-width: 0; }
+    .doc-title { font-size: .88rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .doc-url { font-size: .74rem; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+    .doc-type-badge { font-size: .66rem; font-weight: 700; padding: 2px 8px; border-radius: 99px; text-transform: uppercase; letter-spacing: .4px; white-space: nowrap; }
+    .doc-brochure { background: #ede9fe; color: #7c3aed; }
+    .doc-price { background: #dcfce7; color: #15803d; }
+    .doc-payment { background: #dbeafe; color: #1d4ed8; }
+    .doc-floor { background: #ffedd5; color: #c2410c; }
+    .doc-master { background: #fef9c3; color: #854d0e; }
+    .doc-document { background: #f3f4f6; color: #6b7280; }
+
+    /* Pricing / Payment Plan text blocks */
+    .content-blocks { display: flex; flex-direction: column; gap: 14px; margin-top: 16px; }
+    .content-block { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px; font-size: .84rem; line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
+    .content-block-num { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--sub); margin-bottom: 6px; }
+
+    /* YouTube */
+    .yt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-top: 16px; }
+    .yt-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; transition: box-shadow .2s, transform .2s; }
+    .yt-card:hover { box-shadow: 0 8px 24px rgba(0,0,0,.1); transform: translateY(-2px); }
+    .yt-thumb-wrap { position: relative; aspect-ratio: 16/9; background: #000; overflow: hidden; cursor: pointer; }
+    .yt-thumb-wrap img { width: 100%; height: 100%; object-fit: cover; }
+    .yt-play-btn { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.35); transition: background .2s; }
+    .yt-thumb-wrap:hover .yt-play-btn { background: rgba(0,0,0,.55); }
+    .yt-play-btn svg { filter: drop-shadow(0 2px 8px rgba(0,0,0,.5)); }
+    .yt-info { padding: 12px 14px; }
+    .yt-title { font-size: .84rem; font-weight: 600; margin-bottom: 6px; line-height: 1.4; }
+    .yt-link { font-size: .74rem; color: var(--accent); text-decoration: none; }
+    .yt-link:hover { text-decoration: underline; }
+
+    .ws-empty-tab { text-align: center; padding: 40px 0; color: var(--sub); font-size: .88rem; }
+
+    /* Pricing structured view */
+    .pricing-banner { background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); color: #fff; border-radius: var(--radius); padding: 20px 24px; margin-top: 16px; display: flex; align-items: center; gap: 20px; }
+    .pricing-banner-label { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; opacity: .8; }
+    .pricing-banner-value { font-size: 1.3rem; font-weight: 800; letter-spacing: -.3px; }
+    .pricing-table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-top: 16px; }
+    .pricing-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+    .pricing-table th { background: var(--bg); padding: 11px 16px; text-align: left; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--sub); border-bottom: 1px solid var(--border); }
+    .pricing-table td { padding: 12px 16px; border-bottom: 1px solid var(--bg); vertical-align: middle; }
+    .pricing-table tr:last-child td { border-bottom: none; }
+    .pricing-table tr:hover td { background: #fafafa; }
+    .pricing-price-cell { font-weight: 700; color: #15803d; }
+    /* End website scraper */
+    .ws-form-card { background: var(--surface); border-radius: var(--radius); padding: 28px 32px; }
+    .ws-form-card h2 { font-size: 1rem; font-weight: 700; margin-bottom: 6px; }
+    .ws-form-card > p { font-size: .85rem; color: var(--sub); margin-bottom: 20px; }
+    .ws-form-grid { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
+    .ws-url-field { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 280px; max-width: 460px; }
+    .ws-url-field label { font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--sub); }
+    #ws-url-input { width: 100%; height: 40px; border: 1.5px solid var(--border); border-radius: 9px; padding: 0 14px; font-size: .92rem; color: var(--text); transition: border-color .2s; }
+    #ws-url-input:focus { outline: none; border-color: var(--accent); }
+    .ws-options { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; }
+    .ws-check-label { display: flex; align-items: center; gap: 8px; font-size: .85rem; cursor: pointer; user-select: none; }
+    .ws-check-label input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
+    .ws-range-row { display: flex; align-items: center; gap: 10px; font-size: .85rem; }
+    .ws-range-row label { white-space: nowrap; }
+    #ws-max-pages { width: 130px; accent-color: var(--accent); cursor: pointer; }
+    .ws-select-row { display: flex; align-items: center; gap: 10px; font-size: .85rem; }
+    .ws-select-row label { white-space: nowrap; color: var(--sub); font-size: .82rem; }
+    #ws-image-type { height: 32px; border: 1px solid var(--border); border-radius: 8px; padding: 0 10px; font-size: .83rem; background: var(--bg); color: var(--text); }
+    #ws-scrape-btn { margin-top: 16px; height: 42px; padding: 0 28px; font-size: .92rem; }
+
+    .ws-progress-card { background: var(--surface); border-radius: var(--radius); padding: 28px 32px; margin-top: 16px; }
+    .ws-progress-card h3 { font-size: .9rem; font-weight: 700; margin-bottom: 16px; color: var(--sub); animation: pulse-text 1.5s ease-in-out infinite; }
+    @keyframes pulse-text { 0%,100% { opacity: 1; } 50% { opacity: .6; } }
+    .ws-stats-row { display: flex; gap: 20px; margin-bottom: 16px; flex-wrap: wrap; }
+    .ws-stat-box { display: flex; flex-direction: column; align-items: center; background: var(--bg); border-radius: 10px; padding: 12px 24px; min-width: 110px; }
+    .ws-stat-box strong { font-size: 1.7rem; font-weight: 800; color: var(--accent); line-height: 1.1; }
+    .ws-stat-box span { font-size: .75rem; color: var(--sub); margin-top: 3px; }
+    .ws-current-url-label { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--sub); margin-bottom: 4px; }
+    .ws-current-url { font-size: .8rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 12px; padding: 6px 10px; background: var(--bg); border-radius: 6px; }
+    .ws-log-label { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--sub); margin-bottom: 6px; }
+    .ws-log { height: 160px; background: #1e1f26; color: #94a3b8; padding: 12px 14px; border-radius: 8px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: .74rem; line-height: 1.6; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
+
+    .ws-results-header { display: flex; align-items: center; gap: 12px; margin-top: 20px; margin-bottom: 10px; flex-wrap: wrap; }
+    .ws-filter-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+    .ws-pill { border: 1.5px solid var(--border); background: var(--surface); padding: 5px 14px; border-radius: 99px; font-size: .8rem; font-weight: 600; cursor: pointer; color: var(--sub); transition: background .15s, border-color .15s, color .15s; }
+    .ws-pill.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .ws-pill:not(.active):hover { background: var(--bg); color: var(--text); }
+    #ws-gallery-count { font-size: .82rem; color: var(--sub); margin-left: auto; white-space: nowrap; }
+
+    .ws-bulk-bar { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; flex-wrap: wrap; }
+    #ws-sel-count { font-size: .83rem; color: var(--accent); font-weight: 600; margin-left: 4px; }
+    .ws-bulk-actions { margin-left: auto; display: flex; gap: 8px; }
+
+    #ws-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 16px; margin-top: 14px; }
+    #ws-empty { display: none; text-align: center; padding: 48px 0; color: var(--sub); font-size: .9rem; }
+
+    .ws-card-check { position: absolute; top: 8px; left: 8px; z-index: 2; }
+    .ws-card-check input[type=checkbox] { width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent); }
+
+    /* Lightbox */
+    #lightbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.88); z-index: 1000; flex-direction: column; align-items: center; justify-content: center; padding: 24px; }
+    #lightbox.open { display: flex; }
+    #lb-img-wrap { max-width: min(1100px, calc(100vw - 48px)); max-height: calc(100vh - 120px); display: flex; align-items: center; justify-content: center; position: relative; }
+    #lb-img { max-width: 100%; max-height: calc(100vh - 120px); object-fit: contain; border-radius: 6px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+    .lb-nav { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,.15); border: none; color: #fff; width: 44px; height: 44px; border-radius: 50%; font-size: 1.3rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background .15s; backdrop-filter: blur(4px); }
+    .lb-nav:hover { background: rgba(255,255,255,.3); }
+    #lb-prev { left: -54px; }
+    #lb-next { right: -54px; }
+    #lb-info { color: #e5e7eb; font-size: .83rem; margin-top: 14px; text-align: center; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: center; }
+    #lb-info strong { color: #fff; }
+    #lb-close { position: fixed; top: 18px; right: 20px; background: rgba(255,255,255,.15); border: none; color: #fff; width: 38px; height: 38px; border-radius: 50%; font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); transition: background .15s; }
+    #lb-close:hover { background: rgba(255,255,255,.3); }
+    #lb-counter { position: fixed; top: 22px; left: 50%; transform: translateX(-50%); color: rgba(255,255,255,.7); font-size: .8rem; }
+
+    /* Toast */
+    #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: #1e1f26; color: #fff; padding: 10px 20px; border-radius: 10px; font-size: .85rem; transition: transform .3s; z-index: 2000; max-width: 90vw; text-align: center; }
+    #toast.show { transform: translateX(-50%) translateY(0); }
+    #toast.error { background: var(--danger); }
+    #toast.warn { background: var(--amber); color: #1e1f26; }
+
+    @media (max-width: 600px) {
+      header { padding: 12px 16px; }
+      main { padding: 16px 12px; }
+      #lb-prev, #lb-next { display: none; }
+      .enrich-form { flex-direction: column; }
+      #project-id-input { max-width: none; }
+      .ws-form-card { padding: 20px 16px; }
+      .ws-url-field { max-width: none; }
+    }
+
+    /* ── 99acres Scraper ──────────────────────────────────────────────────── */
+    #acres99-url-input { width: 100%; max-width: 560px; height: 40px; border: 1.5px solid var(--border); border-radius: 9px; padding: 0 14px; font-size: .92rem; color: var(--text); transition: border-color .2s; }
+    #acres99-url-input:focus { outline: none; border-color: var(--accent); }
+    #acres99-url-input.invalid { border-color: var(--danger); }
+    #acres99-url-error { color: var(--danger); font-size: .78rem; margin-top: 5px; display: none; }
+
+    #acres99-html-paste { width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 10px; font-size: .78rem; font-family: 'SF Mono', 'Fira Code', monospace; resize: vertical; background: var(--bg); color: var(--text); }
+    details.a99-manual { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 18px; margin-top: 12px; }
+    details.a99-manual summary { cursor: pointer; font-size: .84rem; font-weight: 600; color: var(--sub); user-select: none; }
+    details.a99-manual summary:hover { color: var(--text); }
+    details.a99-manual > div { margin-top: 12px; }
+
+    /* 99acres sub-tabs reuse .ws-tab / .ws-tab-content */
+    .a99-tabs { display: flex; gap: 2px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 4px; margin-top: 20px; margin-bottom: 0; flex-wrap: wrap; }
+    .a99-tab { border: none; background: none; padding: 7px 16px; border-radius: 7px; font-size: .83rem; font-weight: 600; cursor: pointer; color: var(--sub); transition: background .15s, color .15s; white-space: nowrap; }
+    .a99-tab.active { background: var(--accent); color: #fff; }
+    .a99-tab:not(.active):hover { background: var(--bg); color: var(--text); }
+    .a99-tab-content { display: none; }
+    .a99-tab-content.show { display: block; }
+
+    /* Overview hero card */
+    .a99-doc-link { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; background:var(--surface); border:1.5px solid var(--border); border-radius:8px; font-size:.83rem; font-weight:600; color:var(--accent); text-decoration:none; transition:background .12s,border-color .12s; }
+    .a99-doc-link:hover { background:#eef2ff; border-color:var(--accent); }
+    .a99-hero { background: linear-gradient(135deg,#4f46e5 0%,#7c3aed 60%,#0ea5e9 100%); color:#fff; border-radius: var(--radius); padding: 28px 32px; margin-top: 20px; }
+    .a99-hero-name { font-size: 1.5rem; font-weight: 800; letter-spacing: -.4px; margin-bottom: 6px; }
+    .a99-hero-sub { font-size: .9rem; opacity: .85; margin-bottom: 18px; display: flex; gap: 18px; flex-wrap: wrap; }
+    .a99-hero-tags { display: flex; gap: 10px; flex-wrap: wrap; }
+    .a99-hero-tag { background: rgba(255,255,255,.2); backdrop-filter: blur(6px); padding: 5px 14px; border-radius: 99px; font-size: .8rem; font-weight: 700; }
+    .a99-status-uc  { background: #dbeafe; color: #1d4ed8; }
+    .a99-status-rtm { background: #dcfce7; color: #15803d; }
+    .a99-status-nl  { background: #fef9c3; color: #854d0e; }
+    .a99-status-def { background: var(--bg); color: var(--sub); }
+
+    .a99-info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-top: 16px; }
+    .a99-stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+    .a99-stat-box { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; text-align: center; }
+    .a99-stat-val { font-size: 1.25rem; font-weight: 800; color: var(--accent); }
+    .a99-stat-lbl { font-size: .72rem; color: var(--sub); margin-top: 3px; }
+
+    .a99-rera-chip { display: inline-flex; align-items: center; gap: 8px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 6px 12px; margin: 4px; }
+    .a99-rera-num { font-family: monospace; font-size: .84rem; font-weight: 600; }
+    .a99-rera-state { font-size: .72rem; color: var(--sub); }
+
+    /* Configurations table */
+    .a99-config-table { width: 100%; border-collapse: collapse; font-size: .86rem; }
+    .a99-config-table thead th { background: var(--bg); padding: 10px 14px; text-align: left; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--sub); }
+    .a99-config-table tbody td { padding: 11px 14px; border-bottom: 1px solid var(--bg); vertical-align: middle; }
+    .a99-config-table tbody tr:last-child td { border-bottom: none; }
+    .a99-config-table tbody tr:hover td { background: #fafafa; }
+    .cfg-1bhk { border-left: 3px solid #3b82f6; }
+    .cfg-2bhk { border-left: 3px solid #22c55e; }
+    .cfg-3bhk { border-left: 3px solid #a855f7; }
+    .cfg-4bhk { border-left: 3px solid #f97316; }
+    .cfg-other { border-left: 3px solid #94a3b8; }
+    .a99-price-cell { font-weight: 700; color: #15803d; }
+
+    /* Specs sub-tabs */
+    .spec-sub-tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+    .spec-sub-tab { border: 1.5px solid var(--border); background: var(--surface); padding: 5px 13px; border-radius: 99px; font-size: .79rem; font-weight: 600; cursor: pointer; color: var(--sub); transition: background .15s; }
+    .spec-sub-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .spec-panel { display: none; }
+    .spec-panel.show { display: block; }
+
+    /* 99acres image gallery — reuse existing img-card styles, add filter pills */
+    .a99-img-filter { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; margin-top: 16px; }
+    .a99-pill { border: 1.5px solid var(--border); background: var(--surface); padding: 5px 13px; border-radius: 99px; font-size: .79rem; font-weight: 600; cursor: pointer; color: var(--sub); transition: background .15s, border-color .15s; }
+    .a99-pill.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    #a99-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 16px; }
+    .a99-fp-card { grid-column: span 2; }
+    @media (max-width: 520px) { .a99-fp-card { grid-column: span 1; } }
+
+    /* Badges for 99acres classification */
+    .badge-floor-plan-a99     { background: #dbeafe; color: #1d4ed8; }
+    .badge-render-elevation   { background: #ede9fe; color: #7c3aed; }
+    .badge-construction-progress { background: #fef9c3; color: #854d0e; }
+    .badge-amenity-photo      { background: #d1fae5; color: #065f46; }
+    .badge-interior-photo     { background: #fce7f3; color: #9d174d; }
+    .badge-location-map       { background: #e0f2fe; color: #0369a1; }
+    .badge-other              { background: #f3f4f6; color: #6b7280; }
+    /* 99Acres tuples type badges */
+    .badge-photos             { background: #ede9fe; color: #7c3aed; }
+    .badge-elevation          { background: #ede9fe; color: #7c3aed; }
+    .badge-floor-plan         { background: #dbeafe; color: #1d4ed8; }
+    .badge-master-plan        { background: #fce7f3; color: #9d174d; }
+    .badge-cluster-plan       { background: #fce7f3; color: #be185d; }
+    .badge-site-plan          { background: #fee2e2; color: #991b1b; }
+    .badge-location-map2      { background: #e0f2fe; color: #0369a1; }
+    .badge-amenities          { background: #d1fae5; color: #065f46; }
+    .badge-construction-status { background: #fef9c3; color: #854d0e; }
+    .badge-status-date { background: #fff7ed; color: #c2410c; font-size: .72rem; }
+    /* Date overlay on construction status image thumbnails */
+    .construction-date-overlay {
+      position: absolute; top: 8px; left: 8px; z-index: 3;
+      background: rgba(0,0,0,.62); color: #fff;
+      font-size: .67rem; font-weight: 700; padding: 2px 7px;
+      border-radius: 99px; pointer-events: none; letter-spacing: .2px;
+    }
+    .badge-aerial-view        { background: #ecfdf5; color: #047857; }
+    .badge-interior           { background: #fdf4ff; color: #86198f; }
+    .badge-3d-render          { background: #f0fdf4; color: #15803d; }
+
+    /* Landmark table */
+    .landmark-table { width: 100%; border-collapse: collapse; font-size: .86rem; }
+    .landmark-table th { background: var(--bg); padding: 9px 14px; text-align: left; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--sub); }
+    .landmark-table td { padding: 10px 14px; border-bottom: 1px solid var(--bg); vertical-align: middle; }
+    .landmark-table tr:last-child td { border-bottom: none; }
+    .lm-cat { display: inline-block; font-size: .7rem; font-weight: 700; padding: 2px 8px; border-radius: 99px; text-transform: uppercase; }
+    .lm-School   { background: #dbeafe; color: #1d4ed8; }
+    .lm-Hospital { background: #fee2e2; color: #991b1b; }
+    .lm-Metro    { background: #ede9fe; color: #7c3aed; }
+    .lm-Mall     { background: #fef9c3; color: #854d0e; }
+    .lm-Airport  { background: #e0f2fe; color: #075985; }
+    .lm-Highway  { background: #dcfce7; color: #15803d; }
+    .lm-Other    { background: #f3f4f6; color: #6b7280; }
+
+    /* About blocks */
+    .a99-about-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 22px; margin-top: 16px; font-size: .88rem; line-height: 1.7; color: var(--text); }
+    .a99-about-card h4 { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--sub); margin-bottom: 8px; }
+
+    /* Extraction method badge */
+    .a99-method-badge { display: inline-flex; align-items: center; gap: 5px; font-size: .72rem; font-weight: 700; padding: 3px 10px; border-radius: 99px; margin-bottom: 12px; }
+    .method-api { background: #dcfce7; color: #15803d; }
+    .method-nextjs { background: #dbeafe; color: #1d4ed8; }
+    .method-html { background: #fef9c3; color: #854d0e; }
+    .method-claude { background: #ede9fe; color: #7c3aed; }
+
+    .a99-warn-box { background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 14px 18px; font-size: .84rem; color: #92400e; margin-top: 12px; }
+    .a99-warn-box strong { display: block; margin-bottom: 4px; }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+</head>
+<body>
+
+<header>
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><rect x="8" y="13" width="8" height="6" rx="1"/></svg>
+  <h1>PDF Image Extractor</h1>
+  <span class="hdr-badge">Housing.com · 99acres</span>
+  <span class="hdr-info">Local · Session only</span>
+</header>
+
+<main>
+  <!-- Mode switcher -->
+  <div id="mode-switcher">
+    <button class="mode-tab active" onclick="setMode('upload')">Upload PDF</button>
+    <button class="mode-tab" onclick="setMode('crop')">PDF Crop Tool</button>
+    <button class="mode-tab" onclick="setMode('website')">Website Images</button>
+    <button class="mode-tab" onclick="setMode('acres99')">99acres Scraper</button>
+  </div>
+
+  <!-- ── Upload Mode ─────────────────────────────────────────────────────── -->
+  <div id="upload-mode">
+    <div id="drop-zone">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+      <h2>Drop a PDF here, or click to browse</h2>
+      <p>Images are extracted and kept in-memory for this session only.</p>
+      <input type="file" id="file-input" accept=".pdf" />
+    </div>
+
+    <div id="progress-wrap">
+      <div id="progress-label"><span id="progress-text">Extracting images…</span><span id="progress-pct">0%</span></div>
+      <div id="progress-track"><div id="progress-bar"></div></div>
+    </div>
+
+    <div id="stats-bar">
+      <div class="stat"><strong id="stat-total">0</strong> images found</div>
+      <div class="divider"></div>
+      <div class="stat"><strong id="stat-pages">0</strong> pages</div>
+      <div class="divider"></div>
+      <div class="stat" id="stat-formats-wrap"></div>
+      <button id="upload-another">↑ Upload another PDF</button>
+    </div>
+
+    <div id="controls">
+      <div class="ctrl-group"><label>Page</label><select id="filter-page"><option value="all">All pages</option></select></div>
+      <div class="ctrl-group"><label>Format</label><select id="filter-format"><option value="all">All formats</option></select></div>
+      <div class="ctrl-group">
+        <label>Type</label>
+        <select id="filter-type">
+          <option value="all">All types</option>
+          <optgroup label="Exterior">
+            <option value="Elevation">Elevation</option>
+            <option value="3D Render">3D Render</option>
+          </optgroup>
+          <optgroup label="Amenities &amp; Common">
+            <option value="Amenity">Amenity</option>
+          </optgroup>
+          <optgroup label="Interiors">
+            <option value="Model Flat">Model Flat</option>
+            <option value="Kitchen">Kitchen</option>
+            <option value="Bedroom">Bedroom</option>
+            <option value="Living Room">Living Room</option>
+            <option value="Bathroom">Bathroom</option>
+          </optgroup>
+          <optgroup label="Plans">
+            <option value="Floor Plan">Floor Plan</option>
+            <option value="Master Plan">Master Plan</option>
+            <option value="Cluster Plan">Cluster Plan</option>
+            <option value="Location Plan">Location Plan</option>
+          </optgroup>
+          <optgroup label="Other">
+            <option value="Photo">Photo</option>
+            <option value="Diagram">Diagram</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="ctrl-group dim-group">
+        <div class="ctrl-group"><label>Min W</label><input type="number" id="min-w" placeholder="px" min="0" /></div>
+        <span class="ctrl-sep">×</span>
+        <div class="ctrl-group"><label>Min H</label><input type="number" id="min-h" placeholder="px" min="0" /></div>
+      </div>
+      <div class="ctrl-group">
+        <label>Sort</label>
+        <select id="sort-by">
+          <option value="page">Page order</option>
+          <option value="size-desc">Largest first</option>
+          <option value="size-asc">Smallest first</option>
+          <option value="format">Format</option>
+        </select>
+      </div>
+      <div id="download-btns">
+        <button class="btn btn-outline" id="btn-dl-filtered">↓ Download Filtered</button>
+        <button class="btn btn-primary" id="btn-dl-all">↓ Download All</button>
+      </div>
+    </div>
+
+    <div id="gallery-header"><h3>Extracted Images</h3><span id="gallery-count"></span></div>
+    <!-- PDF bulk bar -->
+    <div class="gallery-bulk-bar" id="pdf-bulk-bar" style="display:none">
+      <button class="btn btn-outline btn-sm" id="pdf-select-all">Select All</button>
+      <button class="btn btn-outline btn-sm" id="pdf-deselect-all">Deselect All</button>
+      <span class="sel-count" id="pdf-sel-count"></span>
+      <div class="bulk-actions">
+        <button class="btn btn-primary btn-sm" id="pdf-dl-selected" disabled>↓ Download Selected</button>
+        <button class="btn btn-outline btn-sm" id="pdf-push-cms" disabled>⬆ Push to CMS</button>
+      </div>
+    </div>
+    <div id="gallery"></div>
+    <div id="empty-msg">No images match the current filters.</div>
+  </div>
+
+  <!-- ── PDF Crop Mode ───────────────────────────────────────────────────── -->
+  <div id="crop-mode" style="display:none">
+    <div class="crop-tool-wrap">
+
+      <!-- Top bar: load PDF + page controls + zoom -->
+      <div id="crop-load-bar">
+        <label class="btn btn-outline btn-sm" for="crop-pdf-input" style="cursor:pointer">Load PDF</label>
+        <input id="crop-pdf-input" type="file" accept="application/pdf" style="display:none">
+        <span id="crop-pdf-name">No PDF loaded</span>
+        <span style="margin-left:auto;font-size:.82rem;color:var(--sub);" id="crop-page-info"></span>
+        <button class="btn btn-outline btn-sm" id="crop-prev-page" disabled>&#8592; Prev</button>
+        <button class="btn btn-outline btn-sm" id="crop-next-page" disabled>Next &#8594;</button>
+        <span style="width:1px;height:20px;background:var(--border);display:inline-block;margin:0 2px;"></span>
+        <button class="btn btn-outline btn-sm" id="crop-zoom-out" disabled title="Zoom out">&#8722;</button>
+        <span id="crop-zoom-label" style="font-size:.82rem;color:var(--sub);min-width:42px;text-align:center;"></span>
+        <button class="btn btn-outline btn-sm" id="crop-zoom-in"  disabled title="Zoom in">&#43;</button>
+        <button class="btn btn-outline btn-sm" id="crop-zoom-fit" disabled title="Fit to window">Fit</button>
+      </div>
+
+      <!-- Two-column layout -->
+      <div class="crop-layout">
+
+        <!-- Left: PDF canvas viewer -->
+        <div class="crop-canvas-wrap" id="crop-canvas-wrap">
+          <canvas id="crop-canvas"></canvas>
+          <canvas id="crop-overlay"></canvas>
+          <div id="crop-hint">Load a PDF and draw a rectangle to crop an image</div>
+        </div>
+
+        <!-- Right: type selector + queue -->
+        <div class="crop-panel">
+
+          <div class="crop-panel-section">
+            <h3>Crop Settings</h3>
+            <label class="crop-label-row">
+              <span>Default Type (applied to next crop)</span>
+              <select id="crop-type-select" class="cat-select">
+                <!-- populated from CAT_PRIMARY_TYPES by JS -->
+              </select>
+            </label>
+            <p class="crop-instructions">Draw a rectangle on the PDF to crop. Each crop is added to the queue below with the full type &amp; sub-type selectors.</p>
+          </div>
+
+          <div class="crop-panel-section" style="flex:1">
+            <div class="crop-queue-header">
+              <h3>Crop Queue <span id="crop-queue-count"></span></h3>
+              <button class="btn btn-outline btn-sm" id="crop-clear-queue">Clear all</button>
+            </div>
+            <div id="crop-queue-list"></div>
+            <div id="crop-queue-empty">No crops yet — draw a selection on the PDF.</div>
+          </div>
+
+          <div class="crop-push-bar">
+            <span id="crop-push-status"></span>
+            <button class="btn btn-primary" id="crop-push-cms-btn" disabled>&#8679; Push to CMS</button>
+          </div>
+
+        </div><!-- end crop-panel -->
+      </div><!-- end crop-layout -->
+    </div><!-- end crop-tool-wrap -->
+  </div>
+
+  <!-- ── Website Scraper Mode ───────────────────────────────────────────── -->
+  <div id="website-mode" style="display:none">
+
+    <!-- Form card -->
+    <div class="ws-form-card">
+      <h2>Developer Website Image Scraper</h2>
+      <p>Enter a developer website URL to crawl and extract all property images automatically.</p>
+      <div class="ws-form-grid">
+        <div class="ws-url-field">
+          <label>Website URL</label>
+          <input id="ws-url-input" type="url" placeholder="https://developer-website.com/project" />
+        </div>
+        <div class="ws-options">
+          <label class="ws-check-label">
+            <input id="ws-deep-crawl" type="checkbox" checked />
+            Deep crawl — follow internal links
+          </label>
+          <div class="ws-range-row">
+            <label>Max pages: <strong id="ws-max-pages-val">5</strong></label>
+            <input id="ws-max-pages" type="range" min="1" max="20" value="5" />
+          </div>
+          <div class="ws-select-row">
+            <label>Image filter:</label>
+            <select id="ws-image-type">
+              <option value="all">All Types</option>
+              <option value="photos">Photos only</option>
+              <option value="floor_plans">Floor Plans</option>
+              <option value="renders">Renders</option>
+              <option value="diagrams">Diagrams</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <button id="ws-scrape-btn" class="btn btn-primary">Scrape Images</button>
+    </div>
+
+    <!-- Progress area -->
+    <div id="ws-progress" style="display:none" class="ws-progress-card">
+      <h3>Scraping in progress…</h3>
+      <div class="ws-stats-row">
+        <div class="ws-stat-box"><strong id="ws-pages-count">0</strong><span>pages crawled</span></div>
+        <div class="ws-stat-box"><strong id="ws-images-count">0</strong><span>images found</span></div>
+      </div>
+      <div class="ws-current-url-label">Currently crawling</div>
+      <div class="ws-current-url" id="ws-current-url">Starting…</div>
+      <div class="ws-log-label">Activity log</div>
+      <div class="ws-log" id="ws-log"></div>
+    </div>
+
+    <!-- Results area -->
+    <div id="ws-results" style="display:none">
+
+      <!-- Tab switcher -->
+      <div class="ws-tabs">
+        <button class="ws-tab active" data-wstab="images">Images</button>
+        <button class="ws-tab" data-wstab="documents">Documents</button>
+        <button class="ws-tab" data-wstab="pricing">Pricing</button>
+        <button class="ws-tab" data-wstab="payment">Payment Plan</button>
+        <button class="ws-tab" data-wstab="videos">Videos</button>
+      </div>
+
+      <!-- ── Tab: Images ────────────────────────────────────────────── -->
+      <div id="ws-tab-images" class="ws-tab-content show">
+        <!-- Filter pills + count -->
+        <div class="ws-results-header" style="margin-top:16px">
+          <div class="ws-filter-pills">
+            <button class="ws-pill active" data-type="all"          onclick="applyWsFilter('all')">All</button>
+            <button class="ws-pill" data-type="Elevation"           onclick="applyWsFilter('Elevation')">Elevation</button>
+            <button class="ws-pill" data-type="Amenity"             onclick="applyWsFilter('Amenity')">Amenity</button>
+            <button class="ws-pill" data-type="Model Flat"          onclick="applyWsFilter('Model Flat')">Model Flat</button>
+            <button class="ws-pill" data-type="Kitchen"             onclick="applyWsFilter('Kitchen')">Kitchen</button>
+            <button class="ws-pill" data-type="Bedroom"             onclick="applyWsFilter('Bedroom')">Bedroom</button>
+            <button class="ws-pill" data-type="Living Room"         onclick="applyWsFilter('Living Room')">Living Room</button>
+            <button class="ws-pill" data-type="Bathroom"            onclick="applyWsFilter('Bathroom')">Bathroom</button>
+            <button class="ws-pill" data-type="Floor Plan"          onclick="applyWsFilter('Floor Plan')">Floor Plan</button>
+            <button class="ws-pill" data-type="Master Plan"         onclick="applyWsFilter('Master Plan')">Master Plan</button>
+            <button class="ws-pill" data-type="Cluster Plan"        onclick="applyWsFilter('Cluster Plan')">Cluster Plan</button>
+            <button class="ws-pill" data-type="Location Plan"       onclick="applyWsFilter('Location Plan')">Location Plan</button>
+            <button class="ws-pill" data-type="3D Render"           onclick="applyWsFilter('3D Render')">3D Render</button>
+            <button class="ws-pill" data-type="Photo"               onclick="applyWsFilter('Photo')">Photo</button>
+            <button class="ws-pill" data-type="Diagram"             onclick="applyWsFilter('Diagram')">Diagram</button>
+          </div>
+          <span id="ws-gallery-count"></span>
+        </div>
+        <!-- Bulk actions bar -->
+        <div class="ws-bulk-bar">
+          <button class="btn btn-outline btn-sm" id="ws-select-all">Select All</button>
+          <button class="btn btn-outline btn-sm" id="ws-deselect-all">Deselect All</button>
+          <span id="ws-sel-count"></span>
+          <div class="ws-bulk-actions">
+            <button class="btn btn-primary btn-sm" id="ws-dl-selected" disabled>↓ Download Selected</button>
+            <button class="btn btn-outline btn-sm" id="ws-push-cms" disabled>⬆ Push to CMS</button>
+            <button class="btn btn-outline btn-sm" id="ws-scrape-new">↩ Scrape New URL</button>
+          </div>
+        </div>
+        <div id="ws-gallery"></div>
+        <div id="ws-empty">No images found for this filter.</div>
+      </div>
+
+      <!-- ── Tab: Documents ─────────────────────────────────────────── -->
+      <div id="ws-tab-documents" class="ws-tab-content">
+        <div id="ws-doc-list" class="doc-list"></div>
+        <div id="ws-doc-empty" class="ws-empty-tab" style="display:none">No documents or PDFs found on this site.</div>
+      </div>
+
+      <!-- ── Tab: Pricing ───────────────────────────────────────────── -->
+      <div id="ws-tab-pricing" class="ws-tab-content">
+        <div id="ws-pricing-blocks" class="content-blocks"></div>
+        <div id="ws-pricing-empty" class="ws-empty-tab" style="display:none">No pricing information detected on this site.</div>
+      </div>
+
+      <!-- ── Tab: Payment Plan ──────────────────────────────────────── -->
+      <div id="ws-tab-payment" class="ws-tab-content">
+        <div id="ws-payment-blocks" class="content-blocks"></div>
+        <div id="ws-payment-empty" class="ws-empty-tab" style="display:none">No payment plan details detected on this site.</div>
+      </div>
+
+      <!-- ── Tab: Videos ───────────────────────────────────────────── -->
+      <div id="ws-tab-videos" class="ws-tab-content">
+        <div id="ws-yt-grid" class="yt-grid"></div>
+        <div id="ws-yt-empty" class="ws-empty-tab" style="display:none">No YouTube videos found on this site.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── 99acres Scraper Mode ──────────────────────────────────────────── -->
+  <div id="acres99-mode" style="display:none">
+
+    <!-- Form card -->
+    <div class="ws-form-card">
+      <h2>99acres Project Scraper</h2>
+      <p>Enter a 99acres project URL containing "npxid" to extract project images, videos, RERA ID and possession date.</p>
+      <div class="ws-url-field" style="max-width:600px">
+        <label>99acres Project URL</label>
+        <input id="acres99-url-input" type="url"
+               placeholder="https://www.99acres.com/godrej-palm-retreat-sector-150-noida-npxid-r333137" />
+        <div id="acres99-url-error">URL must contain "99acres.com" and "npxid"</div>
+      </div>
+      <button id="acres99-submit-btn" class="btn btn-primary" style="margin-top:16px;height:42px;padding:0 28px;font-size:.92rem">
+        Extract Project Data
+      </button>
+    </div>
+
+    <!-- Manual HTML paste fallback -->
+    <details class="a99-manual">
+      <summary>Paste HTML manually — for bot-protected pages</summary>
+      <div>
+        <p style="font-size:.84rem;color:var(--sub);margin-bottom:10px">
+          If the page is bot-protected, open it in your browser, press <strong>Ctrl+U</strong> / <strong>Cmd+U</strong> (View Source), copy all, and paste below.
+          For more images, open DevTools → Elements, right-click <code>&lt;html&gt;</code> → Copy outerHTML and paste.
+        </p>
+        <textarea id="acres99-html-paste" rows="5"
+          placeholder="Paste full page HTML (outerHTML or View Source) here…"></textarea>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+          <button id="acres99-parse-html-btn" class="btn btn-outline btn-sm">Parse Pasted HTML</button>
+          <button id="acres99-debug-parse-btn" class="btn btn-outline btn-sm" style="opacity:.75" onclick="debugParse99acresHtml()">Debug: show extracted types &amp; docs</button>
+        </div>
+        <pre id="acres99-debug-output" style="display:none;margin-top:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;font-size:.76rem;max-height:300px;overflow:auto;white-space:pre-wrap"></pre>
+      </div>
+    </details>
+
+    <!-- Progress -->
+    <div id="acres99-progress" style="display:none" class="ws-progress-card">
+      <h3>Extracting project data…</h3>
+      <div class="ws-stats-row">
+        <div class="ws-stat-box"><strong id="a99-images-count">0</strong><span>images found</span></div>
+        <div class="ws-stat-box"><strong id="a99-videos-count">0</strong><span>videos found</span></div>
+      </div>
+      <div class="ws-log-label">Activity log</div>
+      <div class="ws-log" id="acres99-log"></div>
+    </div>
+
+    <!-- Results -->
+    <div id="acres99-results" style="display:none">
+
+      <!-- Sub-tabs -->
+      <div class="a99-tabs">
+        <button class="a99-tab active" data-a99tab="overview">Overview</button>
+        <button class="a99-tab" data-a99tab="images">Images</button>
+        <button class="a99-tab" data-a99tab="videos">Videos</button>
+        <button class="a99-tab" data-a99tab="raw">Raw Data</button>
+      </div>
+
+      <!-- ── Overview ──────────────────────────────────────────────────── -->
+      <div id="a99-tab-overview" class="a99-tab-content show" style="margin-top:16px">
+        <div id="a99-overview-inner"></div>
+        <div id="a99-documents-bar" style="display:none;margin-top:14px;gap:10px;flex-wrap:wrap"></div>
+      </div>
+
+      <!-- ── Images ────────────────────────────────────────────────────── -->
+      <div id="a99-tab-images" class="a99-tab-content">
+        <div class="a99-img-filter" id="a99-img-pills"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+          <span id="a99-img-count" style="font-size:.82rem;color:var(--sub)"></span>
+          <button class="btn btn-outline btn-sm" id="a99-dl-all-btn">↓ Download All Images</button>
+        </div>
+        <div class="gallery-bulk-bar" id="a99-bulk-bar" style="display:none">
+          <button class="btn btn-outline btn-sm" id="a99-select-all">Select All</button>
+          <button class="btn btn-outline btn-sm" id="a99-deselect-all">Deselect All</button>
+          <span class="sel-count" id="a99-sel-count"></span>
+          <div class="bulk-actions">
+            <button class="btn btn-primary btn-sm" id="a99-dl-selected" disabled>↓ Download Selected</button>
+            <button class="btn btn-outline btn-sm" id="a99-push-cms" disabled>⬆ Push to CMS</button>
+          </div>
+        </div>
+        <div id="a99-gallery"></div>
+        <div id="a99-gallery-empty" class="ws-empty-tab" style="display:none">No images found.</div>
+      </div>
+
+      <!-- ── Videos ────────────────────────────────────────────────────── -->
+      <div id="a99-tab-videos" class="a99-tab-content" style="margin-top:16px">
+        <div id="a99-yt-grid" class="yt-grid"></div>
+        <div id="a99-videos-empty" class="ws-empty-tab" style="display:none">No videos found.</div>
+      </div>
+
+      <!-- ── Raw Data ───────────────────────────────────────────────────── -->
+      <div id="a99-tab-raw" class="a99-tab-content" style="margin-top:16px">
+        <div class="raw-header">
+          <h4>Full Extraction JSON</h4>
+          <button class="btn btn-outline btn-sm" id="a99-copy-raw-btn">Copy JSON</button>
+        </div>
+        <pre id="a99-raw-json" style="background:#1e1f26;color:#e2e8f0;padding:20px;border-radius:var(--radius);font-family:'SF Mono','Fira Code',monospace;font-size:.78rem;line-height:1.6;overflow:auto;max-height:600px;white-space:pre"></pre>
+      </div>
+
+    </div><!-- /acres99-results -->
+  </div><!-- /acres99-mode -->
+
+</main>
+
+<!-- Lightbox -->
+<div id="lightbox">
+  <button id="lb-close">✕</button>
+  <div id="lb-counter"></div>
+  <div id="lb-img-wrap">
+    <button class="lb-nav" id="lb-prev">‹</button>
+    <img id="lb-img" src="" alt="" />
+    <button class="lb-nav" id="lb-next">›</button>
+  </div>
+  <div id="lb-info">
+    <strong id="lb-filename"></strong>
+    <span id="lb-dims"></span>
+    <span id="lb-page"></span>
+    <span id="lb-fmt"></span>
+    <span id="lb-type"></span>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+// ── Mode ──────────────────────────────────────────────────────────────────────
+function setMode(mode) {
+  const modes = ['upload', 'crop', 'website', 'acres99'];
+  document.querySelectorAll('.mode-tab').forEach((b, i) => {
+    b.classList.toggle('active', modes[i] === mode);
+  });
+  document.getElementById('upload-mode').style.display   = mode === 'upload'  ? '' : 'none';
+  document.getElementById('crop-mode').style.display     = mode === 'crop'    ? '' : 'none';
+  document.getElementById('website-mode').style.display  = mode === 'website' ? '' : 'none';
+  document.getElementById('acres99-mode').style.display  = mode === 'acres99' ? '' : 'none';
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = type ? `${type} show` : 'show';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 4000);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  UPLOAD MODE
+// ─────────────────────────────────────────────────────────────────────────────
+const sessionId = crypto.randomUUID();
+
+// Track every session ID that has allocated RAM on the server.
+// On page unload we beacon a clear request for each one instantly.
+const _activeSessions = new Set([sessionId]);
+function _trackSession(sid) { if (sid) _activeSessions.add(sid); }
+window.addEventListener('beforeunload', () => {
+  _activeSessions.forEach(sid => {
+    navigator.sendBeacon('/session/clear', JSON.stringify({session_id: sid}));
+  });
+});
+
+let allImages = [], filteredImages = [], lbImages = [], lbIndex = 0, lbSrcFn = null;
+let progressTimer = null, currentPct = 0;
+
+function setProgress(pct) {
+  currentPct = pct;
+  document.getElementById('progress-bar').style.width = pct + '%';
+  document.getElementById('progress-pct').textContent = Math.round(pct) + '%';
+}
+function startProgress(label) {
+  document.getElementById('progress-wrap').style.display = 'block';
+  document.getElementById('progress-text').textContent = label || 'Uploading PDF…';
+  setProgress(5);
+  progressTimer = setInterval(() => { if (currentPct < 85) setProgress(currentPct + (85 - currentPct) * 0.07); }, 250);
+}
+function finishProgress() {
+  clearInterval(progressTimer); progressTimer = null;
+  document.getElementById('progress-text').textContent = 'Done!';
+  setProgress(100);
+  setTimeout(() => { document.getElementById('progress-wrap').style.display = 'none'; }, 600);
+}
+function errorProgress() {
+  clearInterval(progressTimer); progressTimer = null;
+  document.getElementById('progress-wrap').style.display = 'none'; currentPct = 0;
+}
+
+async function handleFile(file) {
+  if (!file || !file.name.toLowerCase().endsWith('.pdf')) { showToast('Please select a PDF file.', 'error'); return; }
+  allImages = []; filteredImages = []; pdfSelected.clear();
+  document.getElementById('gallery').innerHTML = '';
+  document.getElementById('gallery-header').style.display = 'none';
+  document.getElementById('stats-bar').style.display = 'none';
+  document.getElementById('controls').style.display = 'none';
+  document.getElementById('empty-msg').style.display = 'none';
+  startProgress();
+  const fd = new FormData(); fd.append('file', file);
+  let data;
+  try {
+    const resp = await fetch(`/upload?session_id=${sessionId}`, { method: 'POST', body: fd });
+    if (!resp.ok) { const e = await resp.json().catch(() => ({ detail: resp.statusText })); throw new Error(e.detail || 'Upload failed'); }
+    data = await resp.json();
+  } catch (e) { errorProgress(); showToast(e.message, 'error'); return; }
+  finishProgress();
+  allImages = data.images;
+  if (allImages.length === 0) { showToast('No embedded images found in this PDF.', 'warn'); return; }
+  populateFilters(); applyFilters(); renderStats();
+  document.getElementById('stats-bar').style.display = 'flex';
+  document.getElementById('controls').style.display = 'flex';
+  document.getElementById('gallery-header').style.display = 'flex';
+  showToast(`Found ${allImages.length} image${allImages.length !== 1 ? 's' : ''}.`);
+}
+
+function renderStats() {
+  document.getElementById('stat-total').textContent = allImages.length;
+  document.getElementById('stat-pages').textContent = new Set(allImages.map(i => i.page)).size;
+  const fc = {}; allImages.forEach(i => fc[i.format] = (fc[i.format] || 0) + 1);
+  document.getElementById('stat-formats-wrap').innerHTML = Object.entries(fc).map(([f,c]) => `<strong>${c}</strong> ${f.toUpperCase()}`).join(' · ');
+}
+
+function populateFilters() {
+  const pages = [...new Set(allImages.map(i => i.page))].sort((a,b) => a-b);
+  const pSel = document.getElementById('filter-page');
+  pSel.innerHTML = '<option value="all">All pages</option>';
+  pages.forEach(p => { const o = document.createElement('option'); o.value = p; o.textContent = `Page ${p}`; pSel.appendChild(o); });
+  const fmts = [...new Set(allImages.map(i => i.format))].sort();
+  const fSel = document.getElementById('filter-format');
+  fSel.innerHTML = '<option value="all">All formats</option>';
+  fmts.forEach(f => { const o = document.createElement('option'); o.value = f; o.textContent = f.toUpperCase(); fSel.appendChild(o); });
+}
+
+function applyFilters() {
+  let imgs = [...allImages];
+  const page = document.getElementById('filter-page').value;
+  if (page !== 'all') imgs = imgs.filter(i => i.page === parseInt(page));
+  const fmt = document.getElementById('filter-format').value;
+  if (fmt !== 'all') imgs = imgs.filter(i => i.format === fmt);
+  const type = document.getElementById('filter-type').value;
+  if (type !== 'all') imgs = imgs.filter(i => i.image_type === type);
+  const mw = parseInt(document.getElementById('min-w').value) || 0;
+  const mh = parseInt(document.getElementById('min-h').value) || 0;
+  if (mw) imgs = imgs.filter(i => i.width >= mw);
+  if (mh) imgs = imgs.filter(i => i.height >= mh);
+  const sort = document.getElementById('sort-by').value;
+  if (sort === 'page') imgs.sort((a,b) => a.page - b.page);
+  else if (sort === 'size-desc') imgs.sort((a,b) => b.width*b.height - a.width*a.height);
+  else if (sort === 'size-asc') imgs.sort((a,b) => a.width*a.height - b.width*b.height);
+  else if (sort === 'format') imgs.sort((a,b) => a.format.localeCompare(b.format));
+  filteredImages = imgs;
+  renderGallery();
+}
+['filter-page','filter-format','filter-type','sort-by'].forEach(id => document.getElementById(id).addEventListener('change', applyFilters));
+['min-w','min-h'].forEach(id => document.getElementById(id).addEventListener('input', applyFilters));
+
+function uploadImgSrc(id) { return `/image/${id}?session_id=${sessionId}`; }
+
+function renderGallery() {
+  const gc = document.getElementById('gallery-count');
+  gc.textContent = `${filteredImages.length} of ${allImages.length} shown`;
+  const emptyMsg = document.getElementById('empty-msg');
+  const gallery = document.getElementById('gallery');
+  if (filteredImages.length === 0 && allImages.length > 0) { gallery.innerHTML = ''; emptyMsg.style.display = 'block'; return; }
+  emptyMsg.style.display = 'none';
+  pdfBulkUpdate();
+  gallery.innerHTML = filteredImages.map((img, idx) => {
+    const src = uploadImgSrc(img.id);
+    const name = getRename(img.id, img.filename);
+    const checked = pdfSelected.has(img.id) ? 'checked' : '';
+    const sel = pdfSelected.has(img.id) ? ' selected' : '';
+    return `
+    <div class="img-card${sel}" id="pdfcard-${img.id}" style="position:relative">
+      <div class="card-check">
+        <input type="checkbox" ${checked} onchange="togglePdfSelect('${img.id}',this.checked)" />
+      </div>
+      <span class="src-badge src-pdf">PDF</span>
+      <div class="img-thumb" onclick="openLightbox(filteredImages,${idx},uploadImgSrc)" title="Click to preview">
+        <img src="${src}" alt="${img.filename}" loading="lazy" />
+      </div>
+      <div class="img-body">
+        <input class="img-name-edit" value="${name.replace(/"/g,'&quot;')}" title="Click to rename" onchange="setPdfRename('${img.id}',this.value)" />
+        ${catDropdownsHtml(img.id)}
+        <div class="img-meta"><span>📐 ${img.width}×${img.height}px</span><span>📄 Page ${img.page}</span></div>
+        <div class="badges"><span class="badge badge-fmt">${img.format.toUpperCase()}</span><span class="badge badge-${img.image_type.toLowerCase()}">${img.image_type}</span></div>
+        <div class="card-actions">
+          <button class="card-copy" onclick="copyImageToClipboard('${src}')">⧉ Copy</button>
+          <button class="card-dl" onclick="triggerDownload('${src}',getFilenameWithCat('${img.id}','${img.filename.replace(/'/g,"\\'")}'))">↓ Download</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function triggerDownload(url, filename) {
+  const a = document.createElement('a'); a.href = url; a.download = filename || ''; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+// ── Shared rename state ───────────────────────────────────────────────────────
+const renames = new Map(); // imgId → custom filename
+function getRename(id, orig) { return renames.get(id) || orig; }
+function setRename(id, name) { if (name && name.trim()) renames.set(id, name.trim()); else renames.delete(id); }
+
+// ── Image category state ──────────────────────────────────────────────────────
+const imageCategories = new Map(); // imgId → {type, subtype}
+
+const CAT_PRIMARY_TYPES = [
+  'Elevation','Amenities','Main Other','Location Plan','Layout Plan',
+  'Site Plan','Master Plan','Cluster Plan','Construction Status',
+  'Creative Image','Internal Road','Entry Road','Gate',
+  'Top View (Aerial View)','Reception Area','Payment Plan','Project Logo','QR Code',
+];
+const CAT_AMENITY_SUBTYPES = [
+  '24 X 7 Security','24x7 CCTV Surveillance','24X7 Water Supply','Acupressure Center','Acupressure Pathway','Adventure Club','Aerobics Room','Air Conditioned','Amphitheater','Amusement Area','Anti-termite Treatment','Archery Club','Assembly Area','ATM','Auto Service Station','Automated Car Wash','Ayurveda Centre','Badminton Court','Banquet Hall','Bar/ Chill-out Lounge','Barbecue Area','Basketball Court','Beach access','Beach Volley Ball Court','Billiards/ Snooker Table','Board Games','Boom Barriers','Bowling Alley','Bus Shelter','Business Center','Business Suites','Cafeteria','Car Lift','Car Parking','Car Wash Area','Card Room','Carrom','Central Cooling System','Changing Room','Chess Board',"Children's play area",'Cigar Lounge','Cineplex','Closed Car Parking','Club House','Club Rooftop','Community Buildings','Community Hall','Compound Wall','Concierge Service','Conference Room','Cricket arena','Cricket Pitch','Cycling & Jogging Track','Dart Board','Day Care Center','DG Availability','Discotheque','Dock','Doctor on call','Double Glazed Windows','Earthquake Resistant Structure','Electrical meter Room','Electrification','Energy management','Entrance Gate Security Cabin','Entrance Lobby','Escalators','EV Charging Point','Exotic Plantation','Facilities for Disabled','Feng Shui','Fire Alarm','Fire Escape Staircases','Fire Fighting System','Fire Protection And Fire Safety Requirements','Fire Retardant Structure','Fire Sprinklers','Fitness Center','Flower Garden','Food Court','Foosball','Football Field','Footpaths/ Pedestrian','Fountains','Full Power Backup','Futsal','Garbage Disposal','Gated Community','Gazebo','Golf Course','Grade A Building','Greenhouse Farming','Grocery Shop','Gymnasium','Health Facilities','Helipad','High Speed Elevators','High-tech Alarm System','Hockey Ground','Hospital','Indoor Games','Infinity Pool','Intercom','Internal Roads & Footpaths','Internet/ Wi-Fi','Jacuzzi','Jogging Track',"Kid's Pool",'Landscape Garden and Tree Planting','Landscaped Gardens','Laundromat','Lawn Tennis Court','Letter Box','Library','Lift(s)','Light shows','Lockers','Maintenance Staff','Manicured Garden','Medical Facilities','Medical Store/ Pharmacy','Milk Booth','Mini Theatre','Motion Sensor','Multi - Level Parking','Multipurpose Hall','Multipurpose Room','Natural Pond','Nature Club','Observatories','Open Air Theatre','Open Car Parking','Open Gym','Open Parking','Opera House','Organic Farming','Partial Power Backup','Party Hall','Party Lawn','Paved Compound','Pergola','Pet Grooming','Petrol Pump','Pickleball Court','Piped Gas Connection','Place for Worship','Polo Ground','Projector Wall','Race Course','Rain Water Harvesting','Reading Lounge','Receiving Station','Reception/ Waiting Room','Recreation Facilities','Reflexology Park','Reserved Parking','Rest House for Drivers','Restaurant','RO Water System','Salon','Sauna Bath','School','Security Cabin','Security Guards','Semi Open Car Parking','Senior Citizen Sitout','Sensor operated doors and lifts','Server Room','Service Lift','Sewage Treatment Plant','Shooting range','Shopping Mall','Skating Rink','Smoke Detectors','Solar Lighting','Solar Power System','Solar Water Heating','Solid Waste Management And Disposal','Spa','Spa/ Sauna/ Steam','Sports Area','Sports Complex','Sports Facility','Squash Court','Staff Quarter','Steam Room','Storm Water Drains','Street Lighting','Sub-Station','Sun Bathing','Sun Deck','Swimming Pool','Table Tennis','Taxi/ Bus Terminal','Temple','Tennis Court','Terrace Garden','Theme Park','Two Wheeler Parking','Utility Shops','Vaastu Compliant','Valet Parking','Vastu Compliant','Vertical Garden','Video Door Security','Visitor Parking','Volleyball Court','Waiting Lounge','Wall Climbing','Water Conservation, Rain water Harvesting','Water Softener Plant','Water Sports','Water Storage','Water Supply','Yoga/ Meditation Area','Zebra Crossing',
+];
+const CAT_MAIN_OTHER_SUBTYPES = [
+  'Living Area','Dining Area','Bedroom','Bathroom','Kitchen','Balcony',
+  'Lobby','Plot','Kids Bedroom','Terrace','Pooja Room','Study Room','Servant Room',
+];
+
+function getCat(id) { return imageCategories.get(id) || {type:'', subtype:''}; }
+
+function setCatType(id, type) {
+  const cat = getCat(id);
+  cat.type = type; cat.subtype = '';
+  imageCategories.set(id, cat);
+  // Refresh secondary dropdown
+  const subWrap = document.getElementById(`cat-sub-${id}`);
+  if (!subWrap) return;
+  const needsSub = type === 'Amenities' || type === 'Main Other';
+  subWrap.style.display = needsSub ? 'block' : 'none';
+  if (needsSub) {
+    const opts = type === 'Amenities' ? CAT_AMENITY_SUBTYPES : CAT_MAIN_OTHER_SUBTYPES;
+    const label = type === 'Amenities' ? 'Select Amenity…' : 'Select Sub-type…';
+    subWrap.querySelector('select').innerHTML =
+      `<option value="">${label}</option>` +
+      opts.map(o => `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join('');
+  }
+  // Toggle accent class on primary
+  const pri = document.getElementById(`cat-pri-${id}`);
+  if (pri) pri.classList.toggle('cat-set', !!type);
+}
+
+function setCatSubtype(id, subtype) {
+  const cat = getCat(id); cat.subtype = subtype;
+  imageCategories.set(id, cat);
+  const sel = document.querySelector(`#cat-sub-${id} select`);
+  if (sel) sel.classList.toggle('cat-set', !!subtype);
+}
+
+function getCatLabel(id) {
+  const {type, subtype} = getCat(id);
+  if (!type) return '';
+  return subtype ? `${type} - ${subtype}` : type;
+}
+
+// Returns filename prefixed with category (e.g. "Elevation_0001_img.jpg")
+function getFilenameWithCat(id, origFilename) {
+  const label = getCatLabel(id);
+  const name = getRename(id, origFilename);
+  if (!label) return name;
+  const safeLabel = label.replace(/[^a-zA-Z0-9 ()&_-]/g, '').trim().replace(/ +/g, '_');
+  return `${safeLabel}__${name}`;
+}
+
+// Renders the two category selects as an HTML string (for use inside card template)
+function catDropdownsHtml(id) {
+  const {type, subtype} = getCat(id);
+  const priOpts = CAT_PRIMARY_TYPES.map(t =>
+    `<option value="${escapeHtml(t)}" ${type === t ? 'selected' : ''}>${escapeHtml(t)}</option>`
+  ).join('');
+  const needsSub = type === 'Amenities' || type === 'Main Other';
+  const subOpts  = type === 'Amenities' ? CAT_AMENITY_SUBTYPES : CAT_MAIN_OTHER_SUBTYPES;
+  const subLabel = type === 'Amenities' ? 'Select Amenity…' : 'Select Sub-type…';
+  const subOptsHtml = needsSub
+    ? subOpts.map(o => `<option value="${escapeHtml(o)}" ${subtype===o?'selected':''}>${escapeHtml(o)}</option>`).join('')
+    : '';
+  return `
+    <select id="cat-pri-${id}" class="cat-select${type?' cat-set':''}" onchange="setCatType('${id}',this.value)">
+      <option value="">Select Type…</option>${priOpts}
+    </select>
+    <div id="cat-sub-${id}" style="display:${needsSub?'block':'none'}">
+      <select class="cat-select${subtype?' cat-set':''}" onchange="setCatSubtype('${id}',this.value)">
+        <option value="">${subLabel}</option>${subOptsHtml}
+      </select>
+    </div>`;
+}
+
+// ── Copy image to clipboard ───────────────────────────────────────────────────
+async function copyImageToClipboard(src) {
+  try {
+    const resp = await fetch(src);
+    const blob = await resp.blob();
+    const img = new Image();
+    img.src = URL.createObjectURL(blob);
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; });
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+    canvas.getContext('2d').drawImage(img, 0, 0);
+    URL.revokeObjectURL(img.src);
+    const pngBlob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+    await navigator.clipboard.write([new ClipboardItem({'image/png': pngBlob})]);
+    showToast('Image copied to clipboard!');
+  } catch(e) {
+    showToast('Copy failed — try right-clicking the image', 'error');
+  }
+}
+
+// ── Bulk download with renamed filenames (POST to /download-zip-named) ────────
+async function downloadNamedZip(sessionId, items) {
+  // items: [{id, filename}]
+  try {
+    const resp = await fetch('/download-zip-named', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({session_id: sessionId, images: items}),
+    });
+    if (!resp.ok) { showToast('Download failed', 'error'); return; }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    triggerDownload(url, 'selected_images.zip');
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  } catch(e) { showToast('Download error', 'error'); }
+}
+
+document.getElementById('btn-dl-all').addEventListener('click', () => {
+  if (!allImages.length) return;
+  triggerDownload(`/download-all?session_id=${sessionId}`, 'all_images.zip');
+});
+document.getElementById('btn-dl-filtered').addEventListener('click', () => {
+  if (!filteredImages.length) { showToast('No images visible to download.', 'error'); return; }
+  triggerDownload(`/download-zip?session_id=${sessionId}&ids=${filteredImages.map(i=>i.id).join(',')}`, 'filtered_images.zip');
+});
+
+// ── PDF selection ─────────────────────────────────────────────────────────────
+const pdfSelected = new Set();
+function togglePdfSelect(id, checked) {
+  if (checked) pdfSelected.add(id); else pdfSelected.delete(id);
+  const card = document.getElementById(`pdfcard-${id}`);
+  if (card) card.classList.toggle('selected', checked);
+  pdfBulkUpdate();
+}
+function setPdfRename(id, val) { setRename(id, val); }
+function pdfBulkUpdate() {
+  const bar = document.getElementById('pdf-bulk-bar');
+  if (!allImages.length) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  const count = pdfSelected.size;
+  document.getElementById('pdf-sel-count').textContent = count > 0 ? `${count} selected` : '';
+  document.getElementById('pdf-dl-selected').disabled = count === 0;
+  document.getElementById('pdf-push-cms').disabled = count === 0;
+}
+document.getElementById('pdf-select-all').addEventListener('click', () => {
+  filteredImages.forEach(i => pdfSelected.add(i.id));
+  renderGallery(); pdfBulkUpdate();
+});
+document.getElementById('pdf-deselect-all').addEventListener('click', () => {
+  pdfSelected.clear(); renderGallery(); pdfBulkUpdate();
+});
+document.getElementById('pdf-dl-selected').addEventListener('click', async () => {
+  if (!pdfSelected.size || !sessionId) return;
+  const items = [...pdfSelected].map(id => {
+    const img = allImages.find(i => i.id === id);
+    return {id, filename: getFilenameWithCat(id, img ? img.filename : id)};
+  });
+  await downloadNamedZip(sessionId, items);
+});
+
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); handleFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', () => handleFile(fileInput.files[0]));
+document.getElementById('upload-another').addEventListener('click', () => { fileInput.value = ''; fileInput.click(); });
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  PDF CROP TOOL
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let cropPdfDoc     = null;
+let cropPageNum    = 1;
+let cropTotalPages = 0;
+let cropSessionId  = null;
+let cropQueue      = [];   // [{id, dataUrl, page, width, height}]
+let cropScale      = 1.0;  // current render scale
+
+const cropCanvas  = document.getElementById('crop-canvas');
+const cropCtx     = cropCanvas.getContext('2d');
+const cropOverlay = document.getElementById('crop-overlay');
+const cropOvCtx   = cropOverlay.getContext('2d');
+
+// ── Populate default-type select from shared CAT_PRIMARY_TYPES ────────────────
+(function initCropTypeSelect() {
+  const sel = document.getElementById('crop-type-select');
+  sel.innerHTML = '<option value="">Select Type…</option>' +
+    CAT_PRIMARY_TYPES.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+})();
+
+// ── Zoom helpers ──────────────────────────────────────────────────────────────
+function cropSetZoomButtons(enabled) {
+  ['crop-zoom-in','crop-zoom-out','crop-zoom-fit'].forEach(id =>
+    document.getElementById(id).disabled = !enabled);
+}
+
+function cropUpdateZoomLabel() {
+  document.getElementById('crop-zoom-label').textContent = Math.round(cropScale * 100) + '%';
+}
+
+async function cropApplyScale(newScale) {
+  cropScale = Math.max(0.3, Math.min(4.0, newScale));
+  cropUpdateZoomLabel();
+  await cropRenderPage(cropPageNum);
+}
+
+async function cropFitToWidth() {
+  if (!cropPdfDoc) return;
+  const page = await cropPdfDoc.getPage(cropPageNum);
+  const nativeW = page.getViewport({ scale: 1 }).width;
+  const wrapW   = document.getElementById('crop-canvas-wrap').clientWidth - 16;
+  await cropApplyScale(wrapW / nativeW);
+}
+
+document.getElementById('crop-zoom-in').addEventListener('click',  () => cropApplyScale(cropScale * 1.25));
+document.getElementById('crop-zoom-out').addEventListener('click', () => cropApplyScale(cropScale / 1.25));
+document.getElementById('crop-zoom-fit').addEventListener('click', cropFitToWidth);
+
+// ── Load PDF ──────────────────────────────────────────────────────────────────
+document.getElementById('crop-pdf-input').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  document.getElementById('crop-pdf-name').textContent = file.name;
+  document.getElementById('crop-hint').style.display = 'none';
+  const arrayBuffer = await file.arrayBuffer();
+  try {
+    cropPdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  } catch (err) {
+    showToast('Failed to load PDF: ' + err.message, 'error');
+    return;
+  }
+  cropTotalPages = cropPdfDoc.numPages;
+  cropPageNum    = 1;
+  cropSetZoomButtons(true);
+  await cropFitToWidth();   // auto-fit on first load
+  updateCropPageInfo();
+});
+
+async function cropRenderPage(num) {
+  const page     = await cropPdfDoc.getPage(num);
+  const viewport = page.getViewport({ scale: cropScale });
+  cropCanvas.width  = viewport.width;
+  cropCanvas.height = viewport.height;
+  cropOverlay.width  = viewport.width;
+  cropOverlay.height = viewport.height;
+  cropOverlay.style.width  = viewport.width  + 'px';
+  cropOverlay.style.height = viewport.height + 'px';
+  await page.render({ canvasContext: cropCtx, viewport }).promise;
+  cropOvCtx.clearRect(0, 0, cropOverlay.width, cropOverlay.height);
+}
+
+function updateCropPageInfo() {
+  document.getElementById('crop-page-info').textContent =
+    cropTotalPages ? `Page ${cropPageNum} / ${cropTotalPages}` : '';
+  document.getElementById('crop-prev-page').disabled = cropPageNum <= 1;
+  document.getElementById('crop-next-page').disabled = cropPageNum >= cropTotalPages;
+}
+
+document.getElementById('crop-prev-page').addEventListener('click', async () => {
+  if (cropPageNum > 1) { cropPageNum--; await cropRenderPage(cropPageNum); updateCropPageInfo(); }
+});
+document.getElementById('crop-next-page').addEventListener('click', async () => {
+  if (cropPageNum < cropTotalPages) { cropPageNum++; await cropRenderPage(cropPageNum); updateCropPageInfo(); }
+});
+
+// ── Crop drawing ──────────────────────────────────────────────────────────────
+let cropStart   = null;
+let cropRect    = null;
+let cropDrawing = false;
+
+function cropClientToCanvas(e) {
+  const r = cropOverlay.getBoundingClientRect();
+  return {
+    x: (e.clientX - r.left) * (cropOverlay.width  / r.width),
+    y: (e.clientY - r.top)  * (cropOverlay.height / r.height),
+  };
+}
+
+cropOverlay.addEventListener('mousedown', e => {
+  if (!cropPdfDoc) return;
+  cropStart   = cropClientToCanvas(e);
+  cropDrawing = true;
+});
+
+cropOverlay.addEventListener('mousemove', e => {
+  if (!cropDrawing || !cropStart) return;
+  const p = cropClientToCanvas(e);
+  cropRect = {
+    x: Math.min(cropStart.x, p.x), y: Math.min(cropStart.y, p.y),
+    w: Math.abs(p.x - cropStart.x),  h: Math.abs(p.y - cropStart.y),
+  };
+  cropOvCtx.clearRect(0, 0, cropOverlay.width, cropOverlay.height);
+  cropOvCtx.fillStyle   = 'rgba(79,70,229,0.15)';
+  cropOvCtx.strokeStyle = '#4f46e5';
+  cropOvCtx.lineWidth   = 2;
+  cropOvCtx.fillRect  (cropRect.x, cropRect.y, cropRect.w, cropRect.h);
+  cropOvCtx.strokeRect(cropRect.x, cropRect.y, cropRect.w, cropRect.h);
+});
+
+cropOverlay.addEventListener('mouseup',    finishCrop);
+cropOverlay.addEventListener('mouseleave', cancelCrop);
+
+function cancelCrop() {
+  cropDrawing = false;
+  cropOvCtx.clearRect(0, 0, cropOverlay.width, cropOverlay.height);
+  cropRect = null;
+}
+
+async function finishCrop() {
+  if (!cropDrawing) return;
+  cropDrawing = false;
+  if (!cropRect || cropRect.w < 10 || cropRect.h < 10) { cancelCrop(); return; }
+
+  // Extract region from the rendered PDF canvas at native pixel coords
+  const off = document.createElement('canvas');
+  off.width  = cropRect.w;
+  off.height = cropRect.h;
+  off.getContext('2d').drawImage(cropCanvas,
+    cropRect.x, cropRect.y, cropRect.w, cropRect.h,
+    0, 0, cropRect.w, cropRect.h);
+  const dataUrl   = off.toDataURL('image/jpeg', 0.92);
+  const imageType = document.getElementById('crop-type-select').value || '';
+
+  // Upload to backend
+  try {
+    const resp = await fetch('/upload-crop', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: cropSessionId,
+        image_data: dataUrl,
+        image_type: imageType,
+        page:   cropPageNum,
+        width:  Math.round(cropRect.w),
+        height: Math.round(cropRect.h),
+      }),
+    });
+    if (!resp.ok) throw new Error(await resp.text());
+    const result = await resp.json();
+    cropSessionId = result.session_id;
+
+    // Pre-set imageCategories with the chosen default type
+    imageCategories.set(result.image_id, { type: imageType, subtype: '' });
+
+    cropQueue.push({
+      id: result.image_id, dataUrl,
+      page: cropPageNum, width: Math.round(cropRect.w), height: Math.round(cropRect.h),
+    });
+    renderCropQueue();
+  } catch (err) {
+    showToast('Crop upload failed: ' + err.message, 'error');
+  }
+
+  cropOvCtx.clearRect(0, 0, cropOverlay.width, cropOverlay.height);
+  cropRect = null;
+}
+
+// ── Queue rendering ───────────────────────────────────────────────────────────
+function renderCropQueue() {
+  const list  = document.getElementById('crop-queue-list');
+  const empty = document.getElementById('crop-queue-empty');
+  document.getElementById('crop-queue-count').textContent =
+    cropQueue.length > 0 ? `(${cropQueue.length})` : '';
+
+  if (cropQueue.length === 0) {
+    list.innerHTML = '';
+    empty.style.display = '';
+    document.getElementById('crop-push-cms-btn').disabled = true;
+    return;
+  }
+  empty.style.display = 'none';
+  document.getElementById('crop-push-cms-btn').disabled = false;
+
+  list.innerHTML = '';
+  cropQueue.forEach((item, idx) => {
+    const div = document.createElement('div');
+    div.className = 'crop-item';
+    // Use the shared catDropdownsHtml so Amenities / Main Other get their sub-type selects
+    div.innerHTML = `
+      <img src="${item.dataUrl}" alt="crop">
+      <div class="crop-item-info" style="min-width:0;flex:1">
+        <div class="crop-item-meta">Page ${item.page} &middot; ${item.width}&times;${item.height}px</div>
+        ${catDropdownsHtml(item.id)}
+      </div>
+      <button class="crop-item-del" data-idx="${idx}" title="Remove">&times;</button>`;
+    list.appendChild(div);
+  });
+
+  list.querySelectorAll('.crop-item-del').forEach(btn => {
+    btn.addEventListener('click', e => {
+      cropQueue.splice(+e.target.dataset.idx, 1);
+      renderCropQueue();
+    });
+  });
+}
+
+document.getElementById('crop-clear-queue').addEventListener('click', () => {
+  cropQueue = [];
+  renderCropQueue();
+});
+
+document.getElementById('crop-push-cms-btn').addEventListener('click', () => {
+  if (!cropSessionId || cropQueue.length === 0) return;
+  const selectedSet = new Set(cropQueue.map(i => i.id));
+  const allImgs     = cropQueue.map(i => ({
+    id: i.id, filename: `crop_page${i.page}_${i.id}.jpg`,
+  }));
+  pushToCmsQueue(cropSessionId, selectedSet, allImgs, 'PDF');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  WEBSITE SCRAPER MODE
+// ─────────────────────────────────────────────────────────────────────────────
+let wsSessionId = null;
+let wsImages = [];      // all scraped images (meta objects with .classification field)
+let wsFiltered = [];    // after filter pill
+let wsSelected = new Set();
+let wsPollTimer = null;
+let wsCurrentFilter = 'all';
+
+// ── Website result tabs ───────────────────────────────────────────────────────
+document.querySelectorAll('.ws-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.ws-tab').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.ws-tab-content').forEach(c => c.classList.remove('show'));
+    btn.classList.add('active');
+    document.getElementById(`ws-tab-${btn.dataset.wstab}`).classList.add('show');
+  });
+});
+
+// Slider value display
+document.getElementById('ws-max-pages').addEventListener('input', function () {
+  document.getElementById('ws-max-pages-val').textContent = this.value;
+});
+
+document.getElementById('ws-scrape-btn').addEventListener('click', startScrape);
+document.getElementById('ws-url-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') startScrape();
+});
+
+async function startScrape() {
+  const url = document.getElementById('ws-url-input').value.trim();
+  if (!url) { showToast('Please enter a URL.', 'error'); return; }
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    showToast('URL must start with http:// or https://', 'error');
+    return;
+  }
+
+  const deepCrawl = document.getElementById('ws-deep-crawl').checked;
+  const maxPages  = parseInt(document.getElementById('ws-max-pages').value);
+  const imageTypeFilter = document.getElementById('ws-image-type').value;
+
+  // Reset state
+  wsImages = []; wsFiltered = []; wsSelected.clear(); wsSessionId = null;
+  clearTimeout(wsPollTimer);
+
+  // Show progress, hide results
+  document.getElementById('ws-progress').style.display = 'block';
+  document.getElementById('ws-results').style.display  = 'none';
+  document.getElementById('ws-scrape-btn').disabled = true;
+  document.getElementById('ws-log').textContent = '';
+  document.getElementById('ws-pages-count').textContent  = '0';
+  document.getElementById('ws-images-count').textContent = '0';
+  document.getElementById('ws-current-url').textContent  = 'Connecting…';
+
+  let resp;
+  try {
+    resp = await fetch('/scrape-website', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, deep_crawl: deepCrawl, max_pages: maxPages, image_type_filter: imageTypeFilter }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+      throw new Error(err.detail || `HTTP ${resp.status}`);
+    }
+  } catch (e) {
+    document.getElementById('ws-progress').style.display = 'none';
+    document.getElementById('ws-scrape-btn').disabled = false;
+    showToast(e.message, 'error');
+    return;
+  }
+
+  const data = await resp.json();
+  wsSessionId = data.session_id;
+  _trackSession(wsSessionId);
+  wsPollTimer = setTimeout(pollScrapeStatus, 1000);
+}
+
+function pollScrapeStatus() {
+  if (!wsSessionId) return;
+  fetch(`/scrape-status/${wsSessionId}`)
+    .then(r => r.json())
+    .then(data => {
+      // Update counters
+      document.getElementById('ws-pages-count').textContent  = data.pages_crawled || 0;
+      document.getElementById('ws-images-count').textContent = data.images_found  || 0;
+
+      // Update log
+      if (data.log && data.log.length > 0) {
+        const logEl = document.getElementById('ws-log');
+        logEl.textContent = data.log.join('\n');
+        logEl.scrollTop = logEl.scrollHeight;
+        const lastLine = data.log[data.log.length - 1];
+        document.getElementById('ws-current-url').textContent = lastLine;
+      }
+
+      if (data.status === 'running') {
+        wsPollTimer = setTimeout(pollScrapeStatus, 2000);
+        return;
+      }
+
+      // Done or error
+      document.getElementById('ws-scrape-btn').disabled = false;
+      document.getElementById('ws-progress').style.display = 'none';
+
+      if (data.status === 'error') {
+        const errMsg = (data.errors || []).join('; ') || 'Scraping failed.';
+        showToast(errMsg, 'error');
+        return;
+      }
+
+      // PDF redirect
+      if (data.has_pdf_url) {
+        showToast('This URL is a PDF — switch to Upload PDF mode to extract images.', 'warn');
+        return;
+      }
+
+      // Show results
+      wsImages = data.images || [];
+      wsCurrentFilter = 'all';
+      document.querySelectorAll('.ws-pill').forEach(p => p.classList.toggle('active', p.dataset.type === 'all'));
+      // Reset to Images tab
+      document.querySelectorAll('.ws-tab').forEach(b => b.classList.toggle('active', b.dataset.wstab === 'images'));
+      document.querySelectorAll('.ws-tab-content').forEach(c => c.classList.toggle('show', c.id === 'ws-tab-images'));
+      document.getElementById('ws-results').style.display = 'block';
+      wsSelected.clear();
+      renderWsGallery();
+      updateWsBulkBar();
+      renderWsDocuments(data.documents || []);
+      renderWsPricing(data.pricing || []);
+      renderWsPaymentPlan(data.payment_plan || []);
+      renderWsVideos(data.youtube_links || []);
+
+      const parts = [];
+      if (wsImages.length) parts.push(`${wsImages.length} images`);
+      if ((data.documents||[]).length) parts.push(`${data.documents.length} docs`);
+      if ((data.youtube_links||[]).length) parts.push(`${data.youtube_links.length} videos`);
+      if (parts.length) showToast(`Done! Found ${parts.join(', ')}.`);
+      else showToast('No content found on that site.', 'warn');
+    })
+    .catch(() => {
+      // Network hiccup — retry
+      wsPollTimer = setTimeout(pollScrapeStatus, 2000);
+    });
+}
+
+function applyWsFilter(type) {
+  wsCurrentFilter = type;
+  document.querySelectorAll('.ws-pill').forEach(p => p.classList.toggle('active', p.dataset.type === type));
+  renderWsGallery();
+}
+
+function renderWsGallery() {
+  let imgs = [...wsImages];
+  if (wsCurrentFilter !== 'all') {
+    imgs = imgs.filter(i => i.image_type === wsCurrentFilter);
+  }
+  wsFiltered = imgs;
+
+  document.getElementById('ws-gallery-count').textContent =
+    `${imgs.length} of ${wsImages.length} shown`;
+
+  const gallery = document.getElementById('ws-gallery');
+  const empty   = document.getElementById('ws-empty');
+
+  if (imgs.length === 0) {
+    gallery.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  gallery.innerHTML = imgs.map((img, idx) => {
+    const imgType    = img.image_type || 'Photo';
+    const typeClass  = imgType.toLowerCase().replace(/ /g, '-').replace(/\//g, '-');
+    const isSelected = wsSelected.has(img.id);
+    const src        = `/image/${wsSessionId}/${img.id}`;
+    const name       = getRename(img.id, img.filename || 'image');
+    return `
+      <div class="img-card${isSelected ? ' selected' : ''}" id="wscard-${img.id}" style="position:relative">
+        <div class="card-check">
+          <input type="checkbox" ${isSelected ? 'checked' : ''} onchange="toggleWsSelect('${img.id}', this.checked)" title="Select" />
+        </div>
+        <span class="src-badge src-web">Web</span>
+        <div class="img-thumb" onclick="openLightbox(wsFiltered,${idx},id=>'/image/${wsSessionId}/'+id)" title="Click to preview">
+          <img src="${src}" alt="${name}" loading="lazy" onerror="this.parentElement.style.background='#eef2ff'" />
+        </div>
+        <div class="img-body">
+          <input class="img-name-edit" value="${name.replace(/"/g,'&quot;')}" title="Click to rename" onchange="setRename('${img.id}',this.value)" />
+          ${catDropdownsHtml(img.id)}
+          <div class="img-meta">
+            <span>📐 ${img.width}×${img.height}px</span>
+            ${img.file_size_kb ? `<span>${img.file_size_kb} KB</span>` : ''}
+          </div>
+          <div class="badges">
+            ${img.format ? `<span class="badge badge-fmt">${img.format.toUpperCase()}</span>` : ''}
+            <span class="badge badge-${typeClass}">${imgType}</span>
+          </div>
+          <div class="card-actions">
+            <button class="card-copy" onclick="copyImageToClipboard('${src}')">⧉ Copy</button>
+            <button class="card-dl" onclick="triggerDownload('${src}',getFilenameWithCat('${img.id}','${(img.filename||'image').replace(/'/g,"\\'")}'))">↓ Download</button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function toggleWsSelect(id, checked) {
+  if (checked) wsSelected.add(id);
+  else wsSelected.delete(id);
+  const card = document.getElementById(`wscard-${id}`);
+  if (card) card.classList.toggle('selected', checked);
+  updateWsBulkBar();
+}
+
+function updateWsBulkBar() {
+  const count = wsSelected.size;
+  document.getElementById('ws-sel-count').textContent = count > 0 ? `${count} selected` : '';
+  document.getElementById('ws-dl-selected').disabled = count === 0;
+  document.getElementById('ws-push-cms').disabled = count === 0;
+}
+
+document.getElementById('ws-select-all').addEventListener('click', () => {
+  wsFiltered.forEach(img => wsSelected.add(img.id));
+  renderWsGallery();
+  updateWsBulkBar();
+});
+
+document.getElementById('ws-deselect-all').addEventListener('click', () => {
+  wsSelected.clear();
+  renderWsGallery();
+  updateWsBulkBar();
+});
+
+document.getElementById('ws-dl-selected').addEventListener('click', async () => {
+  if (!wsSelected.size || !wsSessionId) return;
+  const items = [...wsSelected].map(id => {
+    const img = wsImages.find(i => i.id === id);
+    return {id, filename: getFilenameWithCat(id, img ? img.filename : id)};
+  });
+  await downloadNamedZip(wsSessionId, items);
+});
+
+document.getElementById('ws-scrape-new').addEventListener('click', () => {
+  document.getElementById('ws-results').style.display = 'none';
+  wsImages = []; wsFiltered = []; wsSelected.clear(); wsSessionId = null;
+  clearTimeout(wsPollTimer);
+  document.getElementById('ws-url-input').value = '';
+  document.getElementById('ws-url-input').focus();
+});
+
+// ── Render Documents tab ──────────────────────────────────────────────────────
+const DOC_TYPE_CSS = {
+  'Brochure':     'doc-brochure',
+  'Price List':   'doc-price',
+  'Payment Plan': 'doc-payment',
+  'Floor Plans':  'doc-floor',
+  'Master Plan':  'doc-master',
+  'Document':     'doc-document',
+};
+const DOC_ICON = {
+  'Brochure': '📘', 'Price List': '💰', 'Payment Plan': '🗓️',
+  'Floor Plans': '📐', 'Master Plan': '🗺️', 'Document': '📄',
+};
+
+function renderWsDocuments(docs) {
+  const list  = document.getElementById('ws-doc-list');
+  const empty = document.getElementById('ws-doc-empty');
+  const tab   = document.querySelector('.ws-tab[data-wstab="documents"]');
+  if (tab) tab.textContent = `Documents${docs.length ? ` (${docs.length})` : ''}`;
+
+  if (!docs.length) { list.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+  list.innerHTML = docs.map(d => {
+    const css  = DOC_TYPE_CSS[d.type] || 'doc-document';
+    const icon = DOC_ICON[d.type]     || '📄';
+    const isPdf = d.url.toLowerCase().includes('.pdf');
+    return `
+      <div class="doc-item">
+        <div class="doc-icon">${icon}</div>
+        <div class="doc-info">
+          <div class="doc-title" title="${d.title}">${d.title}</div>
+          <div class="doc-url" title="${d.url}">${d.url}</div>
+        </div>
+        <span class="doc-type-badge ${css}">${d.type}</span>
+        <a href="${d.url}" target="_blank" rel="noopener" download="${isPdf ? '' : undefined}"
+           class="btn btn-outline btn-sm" style="flex-shrink:0;text-decoration:none">
+          ${isPdf ? '↓ Download' : '↗ Open'}
+        </a>
+      </div>`;
+  }).join('');
+}
+
+// ── Render Pricing tab ────────────────────────────────────────────────────────
+function renderWsPricing(pricing) {
+  const container = document.getElementById('ws-pricing-blocks');
+  const empty     = document.getElementById('ws-pricing-empty');
+  const tab       = document.querySelector('.ws-tab[data-wstab="pricing"]');
+
+  const configs       = (pricing && pricing.configs)       || [];
+  const startingPrice = (pricing && pricing.starting_price) || null;
+  const rawBlocks     = (pricing && pricing.raw_blocks)    || [];
+  const hasAny = configs.length || startingPrice || rawBlocks.length;
+
+  if (tab) tab.textContent = `Pricing${configs.length ? ` (${configs.length} configs)` : ''}`;
+
+  if (!hasAny) { container.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+
+  let html = '';
+
+  // Starting price banner
+  if (startingPrice) {
+    html += `
+      <div class="pricing-banner">
+        <div class="pricing-banner-label">Starting Price</div>
+        <div class="pricing-banner-value">${escapeHtml(startingPrice)}</div>
+      </div>`;
+  }
+
+  // Structured config table
+  if (configs.length) {
+    const hasArea  = configs.some(r => r.area);
+    html += `
+      <div class="pricing-table-wrap">
+        <table class="pricing-table">
+          <thead>
+            <tr>
+              <th>Configuration</th>
+              ${hasArea ? '<th>Area</th>' : ''}
+              <th>Price</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${configs.map(r => `
+              <tr>
+                <td>${escapeHtml(r.type || '—')}</td>
+                ${hasArea ? `<td>${escapeHtml(r.area || '—')}</td>` : ''}
+                <td class="pricing-price-cell">${escapeHtml(r.price || '—')}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  }
+
+  // Raw fallback blocks (shown only if no structured data, or as supplement)
+  if (rawBlocks.length && !configs.length) {
+    html += rawBlocks.map((blk, i) => `
+      <div class="content-block">
+        <div class="content-block-num">Extracted text ${i + 1}</div>
+        ${escapeHtml(blk)}
+      </div>`).join('');
+  }
+
+  container.innerHTML = html;
+}
+
+// ── Render Payment Plan tab ───────────────────────────────────────────────────
+function renderWsPaymentPlan(blocks) {
+  const container = document.getElementById('ws-payment-blocks');
+  const empty     = document.getElementById('ws-payment-empty');
+  const tab       = document.querySelector('.ws-tab[data-wstab="payment"]');
+  if (tab) tab.textContent = `Payment Plan${blocks.length ? ` (${blocks.length})` : ''}`;
+
+  if (!blocks.length) { container.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+  container.innerHTML = blocks.map((blk, i) => `
+    <div class="content-block">
+      <div class="content-block-num">Extract ${i + 1}</div>
+      ${escapeHtml(blk)}
+    </div>`).join('');
+}
+
+// ── Render Videos tab ─────────────────────────────────────────────────────────
+function renderWsVideos(videos) {
+  const grid  = document.getElementById('ws-yt-grid');
+  const empty = document.getElementById('ws-yt-empty');
+  const tab   = document.querySelector('.ws-tab[data-wstab="videos"]');
+  if (tab) tab.textContent = `Videos${videos.length ? ` (${videos.length})` : ''}`;
+
+  if (!videos.length) { grid.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+  grid.innerHTML = videos.map(v => `
+    <div class="yt-card">
+      <div class="yt-thumb-wrap" onclick="window.open('${v.url}','_blank')">
+        <img src="${v.thumbnail}" alt="${escapeHtml(v.title)}" loading="lazy"
+             onerror="this.src='https://img.youtube.com/vi/${v.video_id}/mqdefault.jpg'" />
+        <div class="yt-play-btn">
+          <svg width="52" height="52" viewBox="0 0 68 48" fill="none">
+            <rect width="68" height="48" rx="10" fill="#FF0000" opacity=".9"/>
+            <path d="M27 15l20 9-20 9V15z" fill="#fff"/>
+          </svg>
+        </div>
+      </div>
+      <div class="yt-info">
+        <div class="yt-title">${escapeHtml(v.title)}</div>
+        <a class="yt-link" href="${v.url}" target="_blank" rel="noopener">Watch on YouTube ↗</a>
+      </div>
+    </div>`).join('');
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  99ACRES SCRAPER
+// ─────────────────────────────────────────────────────────────────────────────
+let a99SessionId = null;
+let a99PollTimer = null;
+let a99Data = null;
+let a99AllImages = [];
+let a99FilteredImages = [];
+let a99CurrentFilter = 'All';
+
+// ── Sub-tab switching ─────────────────────────────────────────────────────────
+document.querySelectorAll('.a99-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.a99-tab').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.a99-tab-content').forEach(c => c.classList.remove('show'));
+    btn.classList.add('active');
+    document.getElementById(`a99-tab-${btn.dataset.a99tab}`).classList.add('show');
+    if (btn.dataset.a99tab === 'images') renderA99Gallery();
+  });
+});
+
+// ── URL validation ────────────────────────────────────────────────────────────
+function validateA99Url(url) {
+  return url.includes('99acres.com') && url.includes('npxid');
+}
+
+function showA99BotBlockedBanner(errors) {
+  // Remove any existing banner
+  document.getElementById('a99-bot-banner')?.remove();
+
+  const url = document.getElementById('acres99-url-input').value.trim();
+  const banner = document.createElement('div');
+  banner.id = 'a99-bot-banner';
+  banner.style.cssText = `
+    background:#fff8e1;border:1px solid #f59e0b;border-radius:10px;
+    padding:16px 20px;margin-bottom:16px;font-size:.88rem;line-height:1.6;
+  `;
+  banner.innerHTML = `
+    <div style="font-weight:700;color:#92400e;margin-bottom:8px">
+      ⚠️ Bot protection blocked the automatic fetch
+    </div>
+    <div style="color:#78350f;margin-bottom:12px">
+      99acres detected the server request. To extract data, open the page in your browser,
+      <strong>scroll through every section</strong> (Floor Plans, Amenities, etc.) to load them,
+      then copy the full page HTML and paste it below.
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      ${url ? `<button onclick="window.open('${url.replace(/'/g,"\\'")}','_blank')"
+        style="background:#f59e0b;color:#fff;border:none;border-radius:7px;padding:7px 14px;font-size:.82rem;font-weight:600;cursor:pointer">
+        Open page in browser ↗
+      </button>` : ''}
+      <button onclick="
+        var d=document.querySelector('.a99-manual');
+        if(d){d.open=true;d.scrollIntoView({behavior:'smooth',block:'center'});}
+        this.closest('#a99-bot-banner').remove();
+      " style="background:var(--accent);color:#fff;border:none;border-radius:7px;padding:7px 14px;font-size:.82rem;font-weight:600;cursor:pointer">
+        Go to paste area ↓
+      </button>
+    </div>
+  `;
+
+  // Insert before the progress card
+  const progress = document.getElementById('acres99-progress');
+  progress.parentNode.insertBefore(banner, progress);
+
+  // Auto-expand the paste section
+  const details = document.querySelector('.a99-manual');
+  if (details) details.open = true;
+}
+
+document.getElementById('acres99-url-input').addEventListener('input', function () {
+  const ok = !this.value || validateA99Url(this.value);
+  this.classList.toggle('invalid', !ok && this.value.length > 10);
+  document.getElementById('acres99-url-error').style.display =
+    (!ok && this.value.length > 10) ? 'block' : 'none';
+});
+
+// ── Start scrape ──────────────────────────────────────────────────────────────
+async function startA99Scrape(htmlSource) {
+  const url = document.getElementById('acres99-url-input').value.trim()
+    || 'https://www.99acres.com/manual-paste-npxid-manual';
+
+  if (!htmlSource && !validateA99Url(url)) {
+    document.getElementById('acres99-url-error').style.display = 'block';
+    document.getElementById('acres99-url-input').classList.add('invalid');
+    return;
+  }
+
+  a99AllImages = []; a99FilteredImages = []; a99CurrentFilter = 'All';
+  a99Selected.clear();
+  a99SessionId = null; a99Data = null;
+  clearTimeout(a99PollTimer);
+
+  document.getElementById('acres99-progress').style.display = 'block';
+  document.getElementById('acres99-results').style.display  = 'none';
+  document.getElementById('acres99-submit-btn').disabled    = true;
+  document.getElementById('acres99-parse-html-btn').disabled = true;
+  document.getElementById('acres99-log').textContent        = '';
+  document.getElementById('a99-images-count').textContent   = '0';
+  document.getElementById('a99-videos-count').textContent   = '0';
+
+  try {
+    const body = { url };
+    if (htmlSource) body.html_source = htmlSource;
+
+    const resp = await fetch('/scrape-99acres', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+      throw new Error(err.detail || `HTTP ${resp.status}`);
+    }
+    const init = await resp.json();
+    a99SessionId = init.session_id;
+    _trackSession(a99SessionId);
+    a99PollTimer = setTimeout(pollA99Status, 1500);
+  } catch (e) {
+    document.getElementById('acres99-progress').style.display = 'none';
+    document.getElementById('acres99-submit-btn').disabled    = false;
+    document.getElementById('acres99-parse-html-btn').disabled = false;
+    showToast(e.message, 'error');
+  }
+}
+
+document.getElementById('acres99-submit-btn').addEventListener('click', () => startA99Scrape(null));
+document.getElementById('acres99-url-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') startA99Scrape(null);
+});
+document.getElementById('acres99-parse-html-btn').addEventListener('click', () => {
+  const html = document.getElementById('acres99-html-paste').value.trim();
+  if (!html) { showToast('Please paste some HTML first.', 'error'); return; }
+  startA99Scrape(html);
+});
+
+async function debugParse99acresHtml() {
+  const html = document.getElementById('acres99-html-paste').value.trim();
+  const out  = document.getElementById('acres99-debug-output');
+  if (!html) { showToast('Paste HTML first.', 'error'); return; }
+  out.style.display = 'block';
+  out.textContent = 'Parsing…';
+  try {
+    const resp = await fetch('/debug-99acres-parse', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({html}),
+    });
+    const data = await resp.json();
+    out.textContent = JSON.stringify(data, null, 2);
+  } catch (e) {
+    out.textContent = 'Error: ' + e.message;
+  }
+}
+
+// ── Polling ───────────────────────────────────────────────────────────────────
+function pollA99Status() {
+  if (!a99SessionId) return;
+  fetch(`/acres99-status/${a99SessionId}`)
+    .then(r => {
+      if (!r.ok) throw new Error(`Server returned ${r.status} — try restarting the server.`);
+      return r.json();
+    })
+    .then(data => {
+      // Log
+      if (data.log && data.log.length) {
+        const logEl = document.getElementById('acres99-log');
+        logEl.textContent = data.log.join('\n');
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+      document.getElementById('a99-images-count').textContent = data.images_found || 0;
+      document.getElementById('a99-videos-count').textContent = (data.videos || []).length;
+
+      if (data.status === 'running') {
+        a99PollTimer = setTimeout(pollA99Status, 2000);
+        return;
+      }
+
+      // Done or error
+      document.getElementById('acres99-progress').style.display = 'none';
+      document.getElementById('acres99-submit-btn').disabled    = false;
+      document.getElementById('acres99-parse-html-btn').disabled = false;
+
+      if (data.status === 'error') {
+        if (data.cloudflare_blocked) {
+          showA99BotBlockedBanner(data.errors || []);
+        } else {
+          const msg = (data.errors || []).join('; ') || 'Extraction failed.';
+          showToast(msg, 'error');
+        }
+        return;
+      }
+
+      if (data.cloudflare_blocked) {
+        showA99BotBlockedBanner(data.errors || []);
+        // Still continue — may have partial DOM data
+      }
+
+      // Render results
+      a99Data = data;
+      a99AllImages = data.images || [];
+      renderA99Results(data);
+      document.getElementById('acres99-results').style.display = 'block';
+      // Reset to Overview tab
+      document.querySelectorAll('.a99-tab').forEach(b => b.classList.toggle('active', b.dataset.a99tab === 'overview'));
+      document.querySelectorAll('.a99-tab-content').forEach(c => c.classList.toggle('show', c.id === 'a99-tab-overview'));
+
+      const parts = [];
+      if (a99AllImages.length) parts.push(`${a99AllImages.length} images`);
+      if ((data.videos||[]).length) parts.push(`${data.videos.length} videos`);
+      const method = data.extraction_method || '';
+      showToast(`Done (${method})! ${parts.join(', ') || 'Check results.'}`);
+    })
+    .catch(err => {
+      // Surface real errors; retry on transient network hiccups
+      const msg = err.message || '';
+      if (msg.includes('Server returned') || msg.includes('restart')) {
+        document.getElementById('acres99-progress').style.display = 'none';
+        document.getElementById('acres99-submit-btn').disabled = false;
+        document.getElementById('acres99-parse-html-btn').disabled = false;
+        showToast(msg, 'error');
+      } else {
+        // Transient network error — retry
+        a99PollTimer = setTimeout(pollA99Status, 2000);
+      }
+    });
+}
+
+// ── Render all results ────────────────────────────────────────────────────────
+function renderA99Results(data) {
+  const proj = data.project || {};
+  renderA99Overview(proj, data);
+  renderA99Gallery();
+  renderA99Videos(data.videos || []);
+  renderA99Documents(data.documents || []);
+  // Raw JSON
+  document.getElementById('a99-raw-json').textContent =
+    JSON.stringify(data, null, 2);
+  // Update tab labels
+  const tmap = {
+    images: a99AllImages.length,
+    videos: (data.videos||[]).length,
+  };
+  document.querySelectorAll('.a99-tab').forEach(btn => {
+    const key = btn.dataset.a99tab;
+    if (tmap[key] !== undefined && tmap[key] > 0)
+      btn.textContent = btn.textContent.split(' (')[0] + ` (${tmap[key]})`;
+  });
+}
+
+// ── Overview ──────────────────────────────────────────────────────────────────
+function a99StatusClass(s) {
+  if (!s) return 'a99-status-def';
+  const l = s.toLowerCase();
+  if (l.includes('ready') || l.includes('move')) return 'a99-status-rtm';
+  if (l.includes('construct') || l.includes('launch')) return 'a99-status-uc';
+  if (l.includes('new')) return 'a99-status-nl';
+  return 'a99-status-def';
+}
+
+function renderA99Overview(proj, data) {
+  const el = document.getElementById('a99-overview-inner');
+  const noVal = v => (v && v !== 'null' && v !== 'None') ? v : '—';
+  const pd = proj.project_details || {};
+  const loc = proj.location || {};
+
+  // Method badge
+  const methodLabels = {
+    api:          ['API',         'method-api'],
+    nextjs_state: ['Next.js Data','method-nextjs'],
+    html_scrape:  ['HTML Scrape', 'method-html'],
+  };
+  const [mLabel, mCss] = methodLabels[data.extraction_method] || ['Unknown', 'method-html'];
+
+  // Hero card
+  const statusLabel = noVal(pd.project_status);
+  let html = `
+    <span class="a99-method-badge ${mCss}">Extracted via: ${mLabel}</span>`;
+
+  html += `
+    <div class="a99-hero">
+      <div class="a99-hero-name">${escapeHtml(noVal(proj.project_name))}</div>
+      <div class="a99-hero-sub">
+        <span>${escapeHtml(noVal(proj.developer_name))}</span>
+        ${loc.full_address ? `<span>📍 ${escapeHtml(loc.full_address)}</span>` : ''}
+      </div>
+      <div class="a99-hero-tags">
+        ${statusLabel !== '—' ? `<span class="a99-hero-tag ${a99StatusClass(statusLabel)}">${escapeHtml(statusLabel)}</span>` : ''}
+        ${pd.possession_date ? `<span class="a99-hero-tag">Possession: ${escapeHtml(pd.possession_date)}</span>` : ''}
+        ${(pd.price_min || pd.price_max) ? `<span class="a99-hero-tag" style="background:#eef2ff;color:var(--accent)">
+          ${pd.price_min ? escapeHtml(pd.price_min) : ''}${pd.price_max ? ' – ' + escapeHtml(pd.price_max) : ''}
+        </span>` : ''}
+        ${data.npxid ? `<span class="a99-hero-tag" style="opacity:.7;font-size:.7rem">NPXID: ${escapeHtml(data.npxid)}</span>` : ''}
+      </div>
+    </div>`;
+
+  // Stats row
+  const stats = [
+    ['total_units', 'Total Units'],
+    ['total_towers', 'Towers'],
+    ['total_floors', 'Floors'],
+    ['total_area_acres', 'Total Area'],
+  ];
+  const statItems = stats.filter(([k]) => pd[k]).map(([k, l]) =>
+    `<div class="a99-stat-box"><div class="a99-stat-val">${escapeHtml(pd[k])}</div><div class="a99-stat-lbl">${l}</div></div>`
+  ).join('');
+  if (statItems) html += `<div class="a99-stat-grid" style="margin-top:16px">${statItems}</div>`;
+
+  // RERA chips
+  const reraIds = Array.isArray(proj.rera_ids) ? proj.rera_ids.filter(r => r && r.number) : [];
+  if (reraIds.length) {
+    html += `<div class="info-card" style="margin-top:16px"><h4>RERA IDs</h4><div style="display:flex;flex-wrap:wrap">`;
+    reraIds.forEach(r => {
+      html += `<div class="a99-rera-chip">
+        <span class="a99-rera-num">${escapeHtml(r.number)}</span>
+        ${r.state ? `<span class="a99-rera-state">${escapeHtml(r.state)}</span>` : ''}
+        ${r.tower_phase ? `<span class="a99-rera-state">${escapeHtml(r.tower_phase)}</span>` : ''}
+        <button class="copy-btn" onclick="copyText('${r.number.replace(/'/g,"\\'")}',this)">Copy</button>
+      </div>`;
+    });
+    html += `</div></div>`;
+  }
+
+  // About blocks
+  if (proj.about_project) {
+    html += `<div class="a99-about-card"><h4>About the Project</h4>${escapeHtml(proj.about_project)}</div>`;
+  }
+  if (proj.about_developer) {
+    html += `<div class="a99-about-card"><h4>About the Developer</h4>${escapeHtml(proj.about_developer)}</div>`;
+  }
+
+  el.innerHTML = html;
+}
+
+// ── Configurations ────────────────────────────────────────────────────────────
+function bhkRowClass(unit_type) {
+  if (!unit_type) return 'cfg-other';
+  const l = unit_type.toLowerCase();
+  if (l.startsWith('1')) return 'cfg-1bhk';
+  if (l.startsWith('2')) return 'cfg-2bhk';
+  if (l.startsWith('3')) return 'cfg-3bhk';
+  if (l.startsWith('4') || l.startsWith('5')) return 'cfg-4bhk';
+  return 'cfg-other';
+}
+
+function renderA99Configs(configs) {
+  const tbody = document.getElementById('a99-configs-body');
+  const empty = document.getElementById('a99-configs-empty');
+  const table = tbody.closest('div');
+
+  if (!configs || !configs.length) {
+    table.style.display = 'none';
+    empty.style.display = 'block';
+    empty.textContent = 'No floor plan data found. Scroll to the Floor Plans & Pricing section on the 99acres page, then use "Paste HTML manually" to extract configs.';
+    return;
+  }
+  table.style.display = '';
+  empty.style.display = 'none';
+
+  tbody.innerHTML = configs.map(c => {
+    const type  = c.unit_type || '—';
+    const area  = c.area && c.area !== '?' ? c.area + ' sq.ft' : '—';
+    const atype = c.area_type && c.area_type !== '?' ? c.area_type : '—';
+    const hasFP = c.has_floor_plan_image;
+    const fpBadge = hasFP
+      ? `<span style="color:var(--green);font-weight:600">✓ Yes</span>`
+      : `<span style="color:var(--sub)">—</span>`;
+    const price = c.price || '—';
+    return `<tr class="${bhkRowClass(type)}">
+      <td><strong>${escapeHtml(type)}</strong></td>
+      <td>${escapeHtml(area)}</td>
+      <td>${escapeHtml(atype)}</td>
+      <td>${fpBadge}</td>
+      <td class="a99-price-cell">${escapeHtml(price)}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Amenities ─────────────────────────────────────────────────────────────────
+function renderA99Amenities(amenities) {
+  document.getElementById('a99-amenities-summary').innerHTML =
+    `<strong>${amenities.length}</strong> amenities extracted from DOM.`;
+
+  if (!amenities.length) {
+    document.getElementById('a99-amenities-body').innerHTML =
+      `<div style="color:var(--sub);font-size:.88rem;padding:20px 0">No amenities found. Scroll to the Amenities section on the 99acres page and click "View All", then use "Paste HTML manually" to extract them.</div>`;
+    return;
+  }
+
+  const foundSet = new Set(amenities.map(a => a.toLowerCase().trim()));
+  let html = '';
+  const assigned = new Set();
+
+  for (const [cat, list] of Object.entries(AMENITY_CATEGORIES)) {
+    const matched = list.filter(a => foundSet.has(a.toLowerCase().trim()));
+    if (!matched.length) continue;
+    matched.forEach(a => assigned.add(a.toLowerCase().trim()));
+    html += `<div class="amenity-group"><h4>${cat} (${matched.length})</h4>
+      <div class="amenity-pills">${matched.map(a => `<span class="amenity-pill">${a}</span>`).join('')}</div></div>`;
+  }
+  const other = amenities.filter(a => !assigned.has(a.toLowerCase().trim()));
+  if (other.length) {
+    html += `<div class="amenity-group"><h4>Other (${other.length})</h4>
+      <div class="amenity-pills">${other.map(a => `<span class="amenity-pill">${a}</span>`).join('')}</div></div>`;
+  }
+  document.getElementById('a99-amenities-body').innerHTML = html;
+}
+
+// ── Specifications ────────────────────────────────────────────────────────────
+function renderA99Specs(specs) {
+  const tabsEl   = document.getElementById('a99-spec-sub-tabs');
+  const panelsEl = document.getElementById('a99-spec-panels');
+  const empty    = document.getElementById('a99-specs-empty');
+
+  const sections = {
+    'Structure': specs.structure ? [[null, specs.structure]] : [],
+    'Flooring':  Object.entries(specs.flooring || {}).filter(([,v]) => v && v !== 'null'),
+    'Kitchen':   specs.kitchen ? [[null, specs.kitchen]] : [],
+    'Doors & Windows': [
+      ...(specs.doors   ? [[null, specs.doors]]   : []),
+      ...(specs.windows ? [[null, specs.windows]] : []),
+    ],
+    'Electrical': [
+      ...(specs.electrical ? [[null, specs.electrical]] : []),
+      ...(specs.plumbing   ? [['Plumbing', specs.plumbing]] : []),
+    ],
+    'Other': Array.isArray(specs.other) ? specs.other.map(o => [null, o]) : [],
+  };
+
+  const activeSections = Object.entries(sections).filter(([,rows]) => rows.length > 0);
+  if (!activeSections.length) {
+    tabsEl.innerHTML = ''; panelsEl.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  tabsEl.innerHTML = activeSections.map(([name], i) =>
+    `<button class="spec-sub-tab${i===0?' active':''}" onclick="switchSpecTab('${name}')" id="sst-${name.replace(/ /g,'-')}">${name}</button>`
+  ).join('');
+
+  panelsEl.innerHTML = activeSections.map(([name, rows], i) => {
+    const rowsHtml = rows.map(([label, val]) => {
+      const lbl = label ? `<strong>${escapeHtml(label)}:</strong> ` : '';
+      return `<div class="info-row"><span class="lbl">${lbl}</span><span class="val">${escapeHtml(val)}</span></div>`;
+    }).join('');
+    return `<div class="spec-panel info-card${i===0?' show':''}" id="sp-${name.replace(/ /g,'-')}">${rowsHtml}</div>`;
+  }).join('');
+}
+
+function switchSpecTab(name) {
+  document.querySelectorAll('.spec-sub-tab').forEach(b =>
+    b.classList.toggle('active', b.id === `sst-${name.replace(/ /g,'-')}`)
+  );
+  document.querySelectorAll('.spec-panel').forEach(p =>
+    p.classList.toggle('show', p.id === `sp-${name.replace(/ /g,'-')}`)
+  );
+}
+
+// ── Images gallery ────────────────────────────────────────────────────────────
+// Preferred display order for known category names.
+// Any category not in this list is sorted alphabetically and appended.
+const A99_TYPE_ORDER = [
+  'Photos', 'Elevation',
+  'Floor Plan', 'Unit Plan',
+  'Master Plan', 'Cluster Plan', 'Site Plan',
+  'Location Map',
+  'Amenities',
+  'Construction Status', 'Construction Progress',
+  'Aerial View',
+  'Interior', 'Interior Photo',
+  '3D Render',
+  // Heuristic fallback labels
+  'Render / Elevation', 'Amenity Photo', 'Photo', 'Other',
+];
+
+const A99_BADGE_CLASS = {
+  // 99Acres tuples types
+  'Photos':                 'badge-photos',
+  'Elevation':              'badge-elevation',
+  'Floor Plan':             'badge-floor-plan',
+  'Unit Plan':              'badge-floor-plan',
+  'Master Plan':            'badge-master-plan',
+  'Cluster Plan':           'badge-cluster-plan',
+  'Site Plan':              'badge-site-plan',
+  'Location Map':           'badge-location-map',
+  'Amenities':              'badge-amenities',
+  'Construction Status':    'badge-construction-status',
+  'Construction Progress':  'badge-construction-progress',
+  'Aerial View':            'badge-aerial-view',
+  'Interior':               'badge-interior',
+  'Interior Photo':         'badge-interior-photo',
+  '3D Render':              'badge-3d-render',
+  // Heuristic fallback labels
+  'Render / Elevation':     'badge-render-elevation',
+  'Amenity Photo':          'badge-amenity-photo',
+  'Photo':                  'badge-photos',
+  'Other':                  'badge-other',
+};
+
+// Build filter pills dynamically from whatever classifications are present
+function buildA99Pills() {
+  const present = [...new Set(a99AllImages.map(i => i.classification).filter(Boolean))];
+  // Sort: known order first, then alphabetical for unknowns
+  present.sort((a, b) => {
+    const ia = A99_TYPE_ORDER.indexOf(a), ib = A99_TYPE_ORDER.indexOf(b);
+    if (ia !== -1 && ib !== -1) return ia - ib;
+    if (ia !== -1) return -1;
+    if (ib !== -1) return 1;
+    return a.localeCompare(b);
+  });
+  const pills = document.getElementById('a99-img-pills');
+  pills.innerHTML = ['All', ...present]
+    .map(c => `<button class="a99-pill${c === a99CurrentFilter ? ' active' : ''}" onclick="setA99Filter('${c}')">${c}</button>`)
+    .join('');
+}
+
+function setA99Filter(type) {
+  a99CurrentFilter = type;
+  document.querySelectorAll('.a99-pill').forEach(p =>
+    p.classList.toggle('active', p.textContent.trim() === type)
+  );
+  renderA99Gallery();
+}
+
+function renderA99Gallery() {
+  buildA99Pills();
+  let imgs = [...a99AllImages];
+  if (a99CurrentFilter !== 'All') {
+    imgs = imgs.filter(i => i.classification === a99CurrentFilter);
+  }
+  a99FilteredImages = imgs;
+
+  const gallery = document.getElementById('a99-gallery');
+  const empty   = document.getElementById('a99-gallery-empty');
+  const countEl = document.getElementById('a99-img-count');
+  countEl.textContent = `${imgs.length} of ${a99AllImages.length} shown`;
+
+  if (!imgs.length) { gallery.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+
+  a99BulkUpdate();
+  gallery.innerHTML = imgs.map((img, idx) => {
+    const cls = img.classification || 'Photo';
+    const badgeCss = A99_BADGE_CLASS[cls] || 'badge-other';
+    const isFloorPlan = ['Floor Plan','Unit Plan','Master Plan','Cluster Plan','Site Plan'].includes(cls);
+    const src = `/image/${a99SessionId}/${img.id}`;
+    const name = getRename(img.id, img.filename || 'image');
+    const checked = a99Selected.has(img.id) ? 'checked' : '';
+    const sel = a99Selected.has(img.id) ? ' selected' : '';
+    const bhkBadge = img.bhk_label
+      ? `<span class="badge" style="background:#dbeafe;color:#1d4ed8">${img.bhk_label}</span>` : '';
+    const dateBadge = img.status_date
+      ? `<span class="badge badge-status-date" title="Construction update date">📅 ${img.status_date}</span>` : '';
+    return `
+      <div class="img-card${isFloorPlan ? ' a99-fp-card' : ''}${sel}" id="a99card-${img.id}" style="position:relative">
+        <div class="card-check">
+          <input type="checkbox" ${checked} onchange="toggleA99Select('${img.id}',this.checked)" />
+        </div>
+        <span class="src-badge src-99ac">99Ac</span>
+        ${img.status_date ? `<span class="construction-date-overlay">${img.status_date}</span>` : ''}
+        <div class="img-thumb" onclick="openLightbox(a99FilteredImages,${idx},id=>'/image/${a99SessionId}/'+id)" title="Click to preview">
+          <img src="${src}" alt="${name}" loading="lazy" onerror="this.parentElement.style.background='#f0f9ff'" />
+        </div>
+        <div class="img-body">
+          <input class="img-name-edit" value="${name.replace(/"/g,'&quot;')}" title="Click to rename" onchange="setRename('${img.id}',this.value)" />
+          ${catDropdownsHtml(img.id)}
+          <div class="img-meta">
+            <span>📐 ${img.width}×${img.height}px</span>
+            ${img.file_size_kb ? `<span>${img.file_size_kb} KB</span>` : ''}
+          </div>
+          <div class="badges">
+            ${img.format ? `<span class="badge badge-fmt">${img.format.toUpperCase()}</span>` : ''}
+            <span class="badge ${badgeCss}">${cls}</span>
+            ${bhkBadge}
+            ${dateBadge}
+          </div>
+          <div class="card-actions">
+            <button class="card-copy" onclick="copyImageToClipboard('${src}')">⧉ Copy</button>
+            <button class="card-dl" onclick="triggerDownload('${src}',getFilenameWithCat('${img.id}','${(img.filename||'image').replace(/'/g,"\\'")}'))">↓ Download</button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+document.getElementById('a99-dl-all-btn').addEventListener('click', () => {
+  if (!a99SessionId || !a99AllImages.length) return;
+  triggerDownload(`/download-zip/${a99SessionId}`, 'acres99_images.zip');
+});
+
+// ── 99acres selection ─────────────────────────────────────────────────────────
+const a99Selected = new Set();
+function toggleA99Select(id, checked) {
+  if (checked) a99Selected.add(id); else a99Selected.delete(id);
+  const card = document.getElementById(`a99card-${id}`);
+  if (card) card.classList.toggle('selected', checked);
+  a99BulkUpdate();
+}
+function a99BulkUpdate() {
+  const bar = document.getElementById('a99-bulk-bar');
+  if (!a99AllImages.length) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  const count = a99Selected.size;
+  document.getElementById('a99-sel-count').textContent = count > 0 ? `${count} selected` : '';
+  document.getElementById('a99-dl-selected').disabled = count === 0;
+  document.getElementById('a99-push-cms').disabled = count === 0;
+}
+document.getElementById('a99-select-all').addEventListener('click', () => {
+  a99FilteredImages.forEach(i => a99Selected.add(i.id));
+  renderA99Gallery(); a99BulkUpdate();
+});
+document.getElementById('a99-deselect-all').addEventListener('click', () => {
+  a99Selected.clear(); renderA99Gallery(); a99BulkUpdate();
+});
+document.getElementById('a99-dl-selected').addEventListener('click', async () => {
+  if (!a99Selected.size || !a99SessionId) return;
+  const items = [...a99Selected].map(id => {
+    const img = a99AllImages.find(i => i.id === id);
+    return {id, filename: getFilenameWithCat(id, img ? img.filename : id)};
+  });
+  await downloadNamedZip(a99SessionId, items);
+});
+
+// ── Videos ────────────────────────────────────────────────────────────────────
+function renderA99Videos(videos) {
+  const grid  = document.getElementById('a99-yt-grid');
+  const empty = document.getElementById('a99-videos-empty');
+  if (!videos || !videos.length) { grid.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+  grid.innerHTML = videos.map(v => `
+    <div class="yt-card">
+      <div class="yt-thumb-wrap" onclick="window.open('${escapeHtml(v.url)}','_blank')">
+        <img src="${v.thumbnail}" alt="Video thumbnail" loading="lazy"
+             onerror="this.src='https://img.youtube.com/vi/${v.embed_id}/mqdefault.jpg'" />
+        <div class="yt-play-btn">
+          <svg width="52" height="52" viewBox="0 0 68 48" fill="none">
+            <rect width="68" height="48" rx="10" fill="#FF0000" opacity=".9"/>
+            <path d="M27 15l20 9-20 9V15z" fill="#fff"/>
+          </svg>
+        </div>
+      </div>
+      <div class="yt-info">
+        <div class="yt-title">${escapeHtml(v.embed_id)}</div>
+        <a class="yt-link" href="${escapeHtml(v.url)}" target="_blank" rel="noopener">Watch on YouTube ↗</a>
+      </div>
+    </div>`).join('');
+}
+
+// ── Documents (Brochure, Payment Plan PDFs) ───────────────────────────────────
+function renderA99Documents(docs) {
+  // Insert document links just below the overview hero card
+  const container = document.getElementById('a99-documents-bar');
+  if (!container) return;
+  if (!docs || !docs.length) { container.style.display = 'none'; return; }
+  container.style.display = 'flex';
+  container.innerHTML = docs.map(d => `
+    <a class="a99-doc-link" href="${escapeHtml(d.url)}" target="_blank" rel="noopener" download>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <line x1="12" y1="12" x2="12" y2="18"/><line x1="9" y1="15" x2="15" y2="15"/>
+      </svg>
+      ${escapeHtml(d.name)}
+    </a>`).join('');
+}
+
+// ── Landmarks ─────────────────────────────────────────────────────────────────
+function renderA99Landmarks(landmarks) {
+  const tbody = document.getElementById('a99-landmarks-body');
+  const empty = document.getElementById('a99-landmarks-empty');
+  const table = tbody.closest('div');
+
+  if (!landmarks || !landmarks.length) {
+    table.style.display = 'none';
+    empty.style.display = 'block';
+    return;
+  }
+  table.style.display = '';
+  empty.style.display = 'none';
+
+  tbody.innerHTML = landmarks.map(lm => {
+    const cat = lm.category || 'Other';
+    const catClass = ['School','Hospital','Metro','Mall','Airport','Highway'].includes(cat)
+      ? `lm-${cat}` : 'lm-Other';
+    return `<tr>
+      <td><strong>${escapeHtml(lm.name || '—')}</strong></td>
+      <td>${escapeHtml(lm.distance || '—')}</td>
+      <td><span class="lm-cat ${catClass}">${escapeHtml(cat)}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+// ── CMS Queue ─────────────────────────────────────────────────────────────────
+// Source labels used by the tool → CMS "Source" dropdown values
+const CMS_SOURCE_MAP = {
+  'PDF':  'Brochure',
+  'Web':  'Developer Website',
+  '99Ac': '99 Acres',
+};
+
+async function pushToCmsQueue(sid, selectedSet, allImgs, sourceLabel) {
+  if (!selectedSet.size) { showToast('No images selected.', 'warn'); return; }
+  const items = [];
+  for (const id of selectedSet) {
+    const img = allImgs.find(i => i.id === id);
+    if (!img) continue;
+    const cat  = getCat(id);
+    const type = cat.type || '';
+    const subtype = cat.subtype || '';
+    const reality = (type === 'Creative Image' || type === 'Top View (Aerial View)') ? 'Artistic' : 'Actual';
+    const origName = img.filename || img.name || (id + '.jpg');
+    const filename = getFilenameWithCat(id, origName);
+    const title    = getRename(id, origName).replace(/\.[^.]+$/, ''); // strip extension
+    const status_date = img.status_date || '';
+    items.push({ id, session_id: sid, source: sourceLabel, category: type, subtype, filename, image_reality: reality, title, status_date });
+  }
+  if (!items.length) { showToast('No valid images to push.', 'warn'); return; }
+  try {
+    const r = await fetch('/cms-queue/push', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({items}),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    const d = await r.json();
+    showToast(`${d.queued} image${d.queued !== 1 ? 's' : ''} queued — open CMS to start uploading`);
+  } catch (e) {
+    showToast('Failed to push to CMS queue: ' + e.message, 'error');
+  }
+}
+
+document.getElementById('pdf-push-cms').addEventListener('click', () =>
+  pushToCmsQueue(sessionId, pdfSelected, allImages, 'PDF'));
+
+
+document.getElementById('ws-push-cms').addEventListener('click', () => {
+  if (!wsSessionId) { showToast('No website scraped yet.', 'warn'); return; }
+  pushToCmsQueue(wsSessionId, wsSelected, wsImages, 'Web');
+});
+
+document.getElementById('a99-push-cms').addEventListener('click', () => {
+  if (!a99SessionId) { showToast('No 99acres data yet.', 'warn'); return; }
+  pushToCmsQueue(a99SessionId, a99Selected, a99AllImages, '99Ac');
+});
+
+// ── Copy raw JSON ─────────────────────────────────────────────────────────────
+document.getElementById('a99-copy-raw-btn').addEventListener('click', () => {
+  navigator.clipboard.writeText(document.getElementById('a99-raw-json').textContent)
+    .then(() => showToast('Copied to clipboard!'));
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  SHARED LIGHTBOX
+// ─────────────────────────────────────────────────────────────────────────────
+function openLightbox(images, idx, srcFn) {
+  lbImages = images; lbIndex = idx; lbSrcFn = srcFn;
+  showLbImage();
+  document.getElementById('lightbox').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('open');
+  document.body.style.overflow = '';
+}
+function showLbImage() {
+  const img = lbImages[lbIndex]; if (!img) return;
+  const src = lbSrcFn(img.id);
+  document.getElementById('lb-img').src = src;
+  document.getElementById('lb-img').alt = img.filename || '';
+  document.getElementById('lb-filename').textContent = img.filename || '';
+  document.getElementById('lb-dims').textContent = `${img.width}×${img.height} px`;
+  document.getElementById('lb-page').textContent = img.page ? `Page ${img.page}` : '';
+  document.getElementById('lb-fmt').textContent = img.format ? img.format.toUpperCase() : '';
+  document.getElementById('lb-type').textContent = img.image_type || '';
+  document.getElementById('lb-counter').textContent = `${lbIndex + 1} / ${lbImages.length}`;
+  document.getElementById('lb-prev').style.visibility = lbIndex > 0 ? 'visible' : 'hidden';
+  document.getElementById('lb-next').style.visibility = lbIndex < lbImages.length - 1 ? 'visible' : 'hidden';
+}
+document.getElementById('lb-close').addEventListener('click', closeLightbox);
+document.getElementById('lb-prev').addEventListener('click', () => { if (lbIndex > 0) { lbIndex--; showLbImage(); } });
+document.getElementById('lb-next').addEventListener('click', () => { if (lbIndex < lbImages.length - 1) { lbIndex++; showLbImage(); } });
+document.getElementById('lightbox').addEventListener('click', e => { if (e.target === document.getElementById('lightbox')) closeLightbox(); });
+document.addEventListener('keydown', e => {
+  if (!document.getElementById('lightbox').classList.contains('open')) return;
+  if (e.key === 'Escape') closeLightbox();
+  if (e.key === 'ArrowLeft') document.getElementById('lb-prev').click();
+  if (e.key === 'ArrowRight') document.getElementById('lb-next').click();
+});
+</script>
+
+</body>
+</html>
