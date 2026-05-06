@@ -632,6 +632,17 @@ def extract_image_urls(soup: BeautifulSoup, html_str: str, page_url: str) -> lis
                 add(val)
                 break
 
+    # 14. Generic popup/lightbox data attributes on any element — e.g. Lodha's
+    # data-popup-img="/sites/default/files/Gallery/main/..."
+    _POPUP_ATTRS = ("data-popup-img", "data-popup-src", "data-full-img",
+                    "data-large", "data-large-src", "data-high-res",
+                    "data-zoom", "data-zoom-src", "data-lightbox-src")
+    for tag in soup.find_all(True):
+        for attr in _POPUP_ATTRS:
+            val = tag.get(attr, "")
+            if val:
+                add(val)
+
     return list(found)
 
 
