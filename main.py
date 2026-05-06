@@ -227,6 +227,7 @@ class ScrapeRequest(BaseModel):
     deep_crawl: bool = True
     max_pages: int = 5
     image_type_filter: str = "all"   # all | photos | floor_plans | renders | diagrams
+    html_override: str = ""           # if set, skip HTTP fetch and parse this HTML directly
 
 # ── PDF helpers ────────────────────────────────────────────────────────────────
 
@@ -1141,6 +1142,7 @@ async def _do_scrape(
     deep_crawl: bool,
     max_pages: int,
     image_type_filter: str,
+    html_override: str = "",
 ) -> None:
     job = scrape_jobs[session_id]
 
@@ -1185,7 +1187,8 @@ async def _do_scrape(
         # ── Crawl pages ─────────────────────────────────────────────────────
         all_img_urls: dict[str, str] = {}   # img_url → found_on_page
         visited: set[str] = set()
-        queue: list[str] = [start_url]
+        # html_override: skip HTTP entirely, parse pasted HTML directly
+        queue: list[str] = [] if html_override else [start_url]
         _auto_nav_urls: set[str] = set()   # nav subpages that bypass max_pages
         pages_crawled = 0
 
@@ -1310,6 +1313,28 @@ async def _do_scrape(
                     log(f"✗ Error on {url}: {e}")
                     pages_crawled += 1
                     job["pages_crawled"] = pages_crawled
+
+        # ── html_override: parse pasted HTML now that accumulators exist ───
+        if html_override:
+            log("Parsing pasted HTML (no HTTP request made)…")
+            _soup = BeautifulSoup(html_override, "lxml")
+            for u in extract_image_urls(_soup, html_override, start_url):
+                all_img_urls.setdefault(u, start_url)
+            all_img_labels.update(extract_fancybox_labels(_soup, start_url))
+            for doc in extract_documents(_soup, start_url, html_override):
+                if doc["url"] not in seen_doc_urls:
+                    seen_doc_urls.add(doc["url"])
+                    all_documents.append(doc)
+            for blk in extract_payment_plan_blocks(_soup):
+                if blk not in all_payment_plan:
+                    all_payment_plan.append(blk)
+            for yt in extract_youtube_links(_soup, html_override):
+                if yt["video_id"] not in seen_yt_ids:
+                    seen_yt_ids.add(yt["video_id"])
+                    all_youtube.append(yt)
+            pages_crawled = 1
+            job["pages_crawled"] = 1
+            log(f"  → {len(all_img_urls)} image URLs found in pasted HTML")
 
         if not all_img_urls:
             log("No image URLs found.")
@@ -1939,7 +1964,7 @@ async def scrape_website(body: ScrapeRequest, background_tasks: BackgroundTasks)
 
     background_tasks.add_task(
         _do_scrape, session_id, body.url,
-        body.deep_crawl, max_pages, body.image_type_filter
+        body.deep_crawl, max_pages, body.image_type_filter, body.html_override
     )
     return {"session_id": session_id, "status": "running"}
 

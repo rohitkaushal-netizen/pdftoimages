@@ -652,6 +652,19 @@
       <button id="ws-scrape-btn" class="btn btn-primary">Scrape Images</button>
     </div>
 
+    <!-- Paste HTML fallback for bot-protected sites like Lodha -->
+    <details style="margin-top:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px">
+      <summary style="font-size:.85rem;font-weight:600;cursor:pointer;color:var(--sub)">Paste HTML manually — for sites that block automated scraping</summary>
+      <div style="margin-top:10px;font-size:.8rem;color:var(--sub);margin-bottom:8px">
+        If the scraper returns no images, the site may block cloud requests. Open the page in your browser, press <strong>Cmd+U</strong> / <strong>Ctrl+U</strong> (View Source), copy all, and paste below.
+      </div>
+      <textarea id="ws-html-paste" rows="5" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:10px;font-size:.78rem;font-family:monospace;resize:vertical;background:var(--bg);color:var(--text)" placeholder="Paste full page HTML here…"></textarea>
+      <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+        <input id="ws-paste-url" type="url" placeholder="Page URL (for resolving relative image paths)" style="flex:1;height:34px;border:1px solid var(--border);border-radius:8px;padding:0 10px;font-size:.83rem;background:var(--bg);color:var(--text)">
+        <button id="ws-parse-html-btn" class="btn btn-outline btn-sm">Extract Images from HTML</button>
+      </div>
+    </details>
+
     <!-- Progress area -->
     <div id="ws-progress" style="display:none" class="ws-progress-card">
       <h3>Scraping in progress…</h3>
@@ -748,7 +761,7 @@
     <!-- Form card -->
     <div class="ws-form-card">
       <h2>Competition Page Scraper</h2>
-      <p>Enter a 99acres project URL containing "npxid" to extract project images, videos, RERA ID and possession date.</p>
+      <p>Enter a competition page URL (99acres) containing "npxid" to extract project images, videos, RERA ID and possession date.</p>
       <div class="ws-url-field" style="max-width:600px">
         <label>Competition Page URL</label>
         <input id="acres99-url-input" type="url"
@@ -1491,6 +1504,32 @@ document.getElementById('ws-url-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') startScrape();
 });
 
+document.getElementById('ws-parse-html-btn').addEventListener('click', async () => {
+  const html = document.getElementById('ws-html-paste').value.trim();
+  const pageUrl = document.getElementById('ws-paste-url').value.trim() || 'https://example.com/';
+  if (!html) { showToast('Please paste some HTML first.', 'error'); return; }
+
+  const btn = document.getElementById('ws-parse-html-btn');
+  btn.disabled = true; btn.textContent = 'Extracting…';
+
+  try {
+    const resp = await fetch('/scrape-website', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: pageUrl, html_override: html, deep_crawl: false, max_pages: 1, image_type_filter: 'all' })
+    });
+    const { session_id } = await resp.json();
+    wsSessionId = session_id;
+    document.getElementById('ws-progress').style.display = '';
+    document.getElementById('ws-results').style.display = 'none';
+    wsPollTimer = setTimeout(pollScrapeStatus, 1000);
+  } catch(e) {
+    showToast('Error: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Extract Images from HTML';
+  }
+});
+
 async function startScrape() {
   const url = document.getElementById('ws-url-input').value.trim();
   if (!url) { showToast('Please enter a URL.', 'error'); return; }
@@ -1911,7 +1950,7 @@ function showA99BotBlockedBanner(errors) {
       ⚠️ Bot protection blocked the automatic fetch
     </div>
     <div style="color:#78350f;margin-bottom:12px">
-      99acres detected the server request. To extract data, open the page in your browser,
+      Bot protection detected. To extract data, open the page in your browser,
       <strong>scroll through every section</strong> (Floor Plans, Amenities, etc.) to load them,
       then copy the full page HTML and paste it below.
     </div>
@@ -2222,7 +2261,7 @@ function renderA99Configs(configs) {
   if (!configs || !configs.length) {
     table.style.display = 'none';
     empty.style.display = 'block';
-    empty.textContent = 'No floor plan data found. Scroll to the Floor Plans & Pricing section on the 99acres page, then use "Paste HTML manually" to extract configs.';
+    empty.textContent = 'No floor plan data found. Scroll to the Floor Plans & Pricing section on the competition page, then use "Paste HTML manually" to extract configs.';
     return;
   }
   table.style.display = '';
@@ -2254,7 +2293,7 @@ function renderA99Amenities(amenities) {
 
   if (!amenities.length) {
     document.getElementById('a99-amenities-body').innerHTML =
-      `<div style="color:var(--sub);font-size:.88rem;padding:20px 0">No amenities found. Scroll to the Amenities section on the 99acres page and click "View All", then use "Paste HTML manually" to extract them.</div>`;
+      `<div style="color:var(--sub);font-size:.88rem;padding:20px 0">No amenities found. Scroll to the Amenities section on the competition page and click "View All", then use "Paste HTML manually" to extract them.</div>`;
     return;
   }
 
