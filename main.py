@@ -1077,9 +1077,19 @@ async def _download_one(
     # ── Phase 1: Download (semaphore limits concurrent connections to target host)
     try:
         async with semaphore:
-            r = await client.get(img_url)
+            # Send Referer so sites don't block hotlinking (e.g. lodhagroup.com)
+            parsed_found = urlparse(found_on)
+            referer = f"{parsed_found.scheme}://{parsed_found.netloc}/"
+            r = await client.get(img_url, headers={"Referer": referer})
+            if r.status_code == 403:
+                # Retry with the exact page URL as Referer
+                r = await client.get(img_url, headers={"Referer": found_on})
             ct = r.headers.get("content-type", "")
-            if not ct.startswith("image/") or len(r.content) < 5 * 1024:
+            # Accept image/* or octet-stream (some CDNs omit proper content-type)
+            looks_like_img = ct.startswith("image/") or ct in (
+                "application/octet-stream", "binary/octet-stream", ""
+            )
+            if not looks_like_img or len(r.content) < 2 * 1024:
                 return None
             img = Image.open(io.BytesIO(r.content))
             w, h = img.size

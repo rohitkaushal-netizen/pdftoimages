@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PDF Extractor + Housing.com + Website + 99acres Scraper</title>
+  <title>Image Extractor</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -451,9 +451,7 @@
 
 <header>
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><rect x="8" y="13" width="8" height="6" rx="1"/></svg>
-  <h1>PDF Image Extractor</h1>
-  <span class="hdr-badge">Housing.com · 99acres</span>
-  <span class="hdr-info">Local · Session only</span>
+  <h1>Image Extractor</h1>
 </header>
 
 <main>
@@ -462,7 +460,7 @@
     <button class="mode-tab active" onclick="setMode('upload')">Upload PDF</button>
     <button class="mode-tab" onclick="setMode('crop')">PDF Crop Tool</button>
     <button class="mode-tab" onclick="setMode('website')">Website Images</button>
-    <button class="mode-tab" onclick="setMode('acres99')">99acres Scraper</button>
+    <button class="mode-tab" onclick="setMode('acres99')">Competition Page</button>
   </div>
 
   <!-- ── Upload Mode ─────────────────────────────────────────────────────── -->
@@ -749,10 +747,10 @@
 
     <!-- Form card -->
     <div class="ws-form-card">
-      <h2>99acres Project Scraper</h2>
+      <h2>Competition Page Scraper</h2>
       <p>Enter a 99acres project URL containing "npxid" to extract project images, videos, RERA ID and possession date.</p>
       <div class="ws-url-field" style="max-width:600px">
-        <label>99acres Project URL</label>
+        <label>Competition Page URL</label>
         <input id="acres99-url-input" type="url"
                placeholder="https://www.99acres.com/godrej-palm-retreat-sector-150-noida-npxid-r333137" />
         <div id="acres99-url-error">URL must contain "99acres.com" and "npxid"</div>
