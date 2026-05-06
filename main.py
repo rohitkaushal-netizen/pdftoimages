@@ -1176,6 +1176,7 @@ async def _do_scrape(
         all_img_urls: dict[str, str] = {}   # img_url → found_on_page
         visited: set[str] = set()
         queue: list[str] = [start_url]
+        _auto_nav_urls: set[str] = set()   # nav subpages that bypass max_pages
         pages_crawled = 0
 
         # Accumulated extra data
@@ -1193,7 +1194,7 @@ async def _do_scrape(
         async with httpx.AsyncClient(
             timeout=30, verify=False, follow_redirects=True, headers=BROWSER_HEADERS
         ) as client:
-            while queue and pages_crawled < max_pages:
+            while queue and (pages_crawled < max_pages or queue[0] in _auto_nav_urls):
                 url = queue.pop(0)
                 if url in visited:
                     continue
@@ -1275,6 +1276,19 @@ async def _do_scrape(
                     pages_crawled += 1
                     job["pages_crawled"] = pages_crawled
                     log(f"  → {new_count} new images | {len(all_documents)} docs | {len(all_youtube)} videos (total: {len(all_img_urls)} imgs)")
+
+                    # Always auto-fetch priority nav subpages (gallery, amenities,
+                    # plans) found in the page's navigation — regardless of
+                    # deep_crawl. This handles developer sites like Lodha where
+                    # gallery images live on a /gallery subpage.
+                    if url == start_url:
+                        nav_links = extract_internal_links(soup, url, base_domain)
+                        for lnk in nav_links:
+                            lnk_lower = lnk.lower()
+                            if any(kw in lnk_lower for kw in CRAWL_PRIORITY_KW):
+                                if lnk not in visited and lnk not in queue:
+                                    queue.append(lnk)
+                                    _auto_nav_urls.add(lnk)
 
                     if deep_crawl and pages_crawled < max_pages:
                         links = extract_internal_links(soup, url, base_domain)
