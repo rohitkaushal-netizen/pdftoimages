@@ -1228,12 +1228,6 @@ const cropCtx     = cropCanvas.getContext('2d');
 const cropOverlay = document.getElementById('crop-overlay');
 const cropOvCtx   = cropOverlay.getContext('2d');
 
-// ── Populate default-type select from shared CAT_PRIMARY_TYPES ────────────────
-(function initCropTypeSelect() {
-  const sel = document.getElementById('crop-type-select');
-  sel.innerHTML = '<option value="">Select Type…</option>' +
-    CAT_PRIMARY_TYPES.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
-})();
 
 // ── Zoom helpers ──────────────────────────────────────────────────────────────
 function cropSetZoomButtons(enabled) {
@@ -1366,7 +1360,7 @@ async function finishCrop() {
     cropRect.x, cropRect.y, cropRect.w, cropRect.h,
     0, 0, cropRect.w, cropRect.h);
   const dataUrl   = off.toDataURL('image/jpeg', 0.92);
-  const imageType = document.getElementById('crop-type-select').value || '';
+  const imageType = '';
 
   // Upload to backend
   try {
