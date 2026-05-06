@@ -586,17 +586,6 @@
         <!-- Right: type selector + queue -->
         <div class="crop-panel">
 
-          <div class="crop-panel-section">
-            <h3>Crop Settings</h3>
-            <label class="crop-label-row">
-              <span>Default Type (applied to next crop)</span>
-              <select id="crop-type-select" class="cat-select">
-                <!-- populated from CAT_PRIMARY_TYPES by JS -->
-              </select>
-            </label>
-            <p class="crop-instructions">Draw a rectangle on the PDF to crop. Each crop is added to the queue below with the full type &amp; sub-type selectors.</p>
-          </div>
-
           <div class="crop-panel-section" style="flex:1">
             <div class="crop-queue-header">
               <h3>Crop Queue <span id="crop-queue-count"></span></h3>
@@ -629,14 +618,6 @@
           <input id="ws-url-input" type="url" placeholder="https://developer-website.com/project" />
         </div>
         <div class="ws-options">
-          <label class="ws-check-label">
-            <input id="ws-deep-crawl" type="checkbox" checked />
-            Deep crawl — follow internal links
-          </label>
-          <div class="ws-range-row">
-            <label>Max pages: <strong id="ws-max-pages-val">5</strong></label>
-            <input id="ws-max-pages" type="range" min="1" max="20" value="5" />
-          </div>
           <div class="ws-select-row">
             <label>Image filter:</label>
             <select id="ws-image-type">
@@ -1494,10 +1475,6 @@ document.querySelectorAll('.ws-tab').forEach(btn => {
   });
 });
 
-// Slider value display
-document.getElementById('ws-max-pages').addEventListener('input', function () {
-  document.getElementById('ws-max-pages-val').textContent = this.value;
-});
 
 document.getElementById('ws-scrape-btn').addEventListener('click', startScrape);
 document.getElementById('ws-url-input').addEventListener('keydown', e => {
@@ -1538,8 +1515,8 @@ async function startScrape() {
     return;
   }
 
-  const deepCrawl = document.getElementById('ws-deep-crawl').checked;
-  const maxPages  = parseInt(document.getElementById('ws-max-pages').value);
+  const deepCrawl = false;
+  const maxPages  = 1;
   const imageTypeFilter = document.getElementById('ws-image-type').value;
 
   // Reset state
