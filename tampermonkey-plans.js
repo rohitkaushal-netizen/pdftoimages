@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PDF Tool → CMS Auto-Fill (Project Plans)
 // @namespace    https://housing.com
-// @version      3.1
+// @version      3.2
 // @description  Auto-fills CMS Project Plans form. Title is left to CMS auto-fill. Supports Main Other Type, Amenities Type, and Construction Status fields.
 // @author       Housing.com
 // @match        https://cms.housing.com/project_plan_add.php*
@@ -1275,6 +1275,8 @@
           await apiPost('/cms-queue/done', {count: _planBatchSentCount || 1});
 
           if (action === 'add_more') {
+            // Wait for the CMS to fully reset the DOM before filling the next batch
+            await sleep(800);
             await fetchNext(true);
           } else {
             await fetchNext(false);
@@ -1287,17 +1289,21 @@
   }
 
   function attachFormListeners() {
+    // Form submit listener — only attach once (traditional page-reload path)
     const form = document.querySelector('form');
-    if (!form || form._cmsPlansWatched) return;
-    form._cmsPlansWatched = true;
+    if (form && !form._cmsPlansWatched) {
+      form._cmsPlansWatched = true;
+      form.addEventListener('submit', () => {
+        sessionStorage.setItem(SS_SAVED,  '1');
+        sessionStorage.setItem(SS_PENDING, '1');
+        sessionStorage.setItem(SS_MODE,   '1');
+        sessionStorage.setItem(SS_BCOUNT, String(_planBatchSentCount || 1));
+      });
+    }
 
-    form.addEventListener('submit', () => {
-      sessionStorage.setItem(SS_SAVED,  '1');
-      sessionStorage.setItem(SS_PENDING, '1');
-      sessionStorage.setItem(SS_MODE,   '1');
-      sessionStorage.setItem(SS_BCOUNT, String(_planBatchSentCount || 1));
-    });
-
+    // Button listeners — checked every call because AJAX Add More can replace the
+    // button DOM element; the per-element flag prevents duplicate listeners on the
+    // same element while still attaching to freshly-created replacement elements.
     const addMoreBtn = findAddMoreBtn();
     if (addMoreBtn && !addMoreBtn._cmsPlansWatched) {
       addMoreBtn._cmsPlansWatched = true;
