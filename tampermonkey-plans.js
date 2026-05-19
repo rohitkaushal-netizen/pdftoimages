@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PDF Tool → CMS Auto-Fill (Project Plans)
 // @namespace    https://housing.com
-// @version      3.0
+// @version      3.1
 // @description  Auto-fills CMS Project Plans form. Title is left to CMS auto-fill. Supports Main Other Type, Amenities Type, and Construction Status fields.
 // @author       Housing.com
 // @match        https://cms.housing.com/project_plan_add.php*
@@ -363,7 +363,47 @@
   }
 
   function findTaggedDateInputs() {
-    return findControlsByLabel('tagged date', 'input[type="text"], textarea');
+    // Use TreeWalker (same pattern as findSelectImmediatelyAfterLabel) so we grab
+    // the input that is physically RIGHT AFTER the "Tagged Date" label text.
+    // findControlsByLabel's parent-container fallback picks up Image URL inputs
+    // that happen to live in the same broad parent, returning them before Tagged Date.
+    const needle = norm('tagged date');
+    const results = [];
+    const seen = new Set();
+
+    const candidates = Array.from(document.querySelectorAll('td,th,div,tr'))
+      .filter(isVisible)
+      .filter(el => norm(el.textContent).includes(needle));
+    candidates.sort((a, b) => a.textContent.length - b.textContent.length);
+
+    for (const el of candidates) {
+      const walker = document.createTreeWalker(
+        el, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, null, false
+      );
+      let past = false, node;
+      while ((node = walker.nextNode())) {
+        if (!past && node.nodeType === Node.TEXT_NODE && norm(node.textContent).includes(needle)) {
+          past = true;
+        } else if (past && node.nodeType === Node.ELEMENT_NODE && isVisible(node)) {
+          if (node.tagName === 'INPUT' && node.type !== 'file' && node.type !== 'radio'
+              && node.type !== 'checkbox' && node.type !== 'hidden' && !seen.has(node)) {
+            seen.add(node);
+            results.push(node);
+            break; // one per label occurrence
+          }
+        }
+      }
+      // Also handle label-cell / input-cell split (label in one TD, input in the next)
+      const next = el.nextElementSibling;
+      if (next) {
+        const inp = Array.from(next.querySelectorAll(
+          'input:not([type="file"]):not([type="radio"]):not([type="checkbox"]):not([type="hidden"])'
+        )).find(i => isVisible(i) && !seen.has(i));
+        if (inp) { seen.add(inp); results.push(inp); }
+      }
+      if (results.length >= 10) break;
+    }
+    return results;
   }
 
   function findTowerSelects() {
