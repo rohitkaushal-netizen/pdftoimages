@@ -1579,7 +1579,7 @@ async def clear_session(body: dict):
 async def debug_99acres_parse(body: dict):
     """
     Dev endpoint: paste any 99acres HTML and see what the parser extracts.
-    Returns next_data presence, tuples type map, and documents found.
+    Returns next_data presence, tuples type map, documents, and construction URL diagnosis.
     """
     html_str = body.get("html", "")
     if not html_str:
@@ -1589,19 +1589,30 @@ async def debug_99acres_parse(body: dict):
     next_data = _parse_next_data(html_str)
 
     url_to_type: dict[str, str] = {}
+    url_to_date: dict[str, str] = {}
+    _CONSTR_KEYS = ('"constructionImages"', '"constructionStatus"',
+                    '"constructionUpdates"', '"constructionData"',
+                    '"statusImages"', '"updateImages"', '"sitePhotos"')
     if next_data:
-        url_to_type.update(_extract_tuples_type_map(next_data))
+        url_to_type.update(_extract_tuples_type_map(next_data, url_to_date))
+        for _k,_v in _extract_a99_construction_dates(next_data).items(): url_to_date.setdefault(_k,_v)
 
     _decoder = json.JSONDecoder()
     scripts_with_tuples = 0
+    scripts_with_constr = 0
     for script in soup.find_all("script"):
         content = script.string or ""
-        if '"tuples"' not in content:
+        has_tuples = '"tuples"' in content
+        has_constr = any(k in content for k in _CONSTR_KEYS)
+        if not has_tuples and not has_constr:
             continue
-        scripts_with_tuples += 1
+        if has_tuples:
+            scripts_with_tuples += 1
+        if has_constr:
+            scripts_with_constr += 1
         try:
             data = json.loads(content)
-            url_to_type.update(_extract_tuples_type_map(data))
+            url_to_type.update(_extract_tuples_type_map(data, url_to_date))
             continue
         except Exception:
             pass
@@ -1610,23 +1621,47 @@ async def debug_99acres_parse(body: dict):
             try:
                 data, _ = _decoder.raw_decode(content, pos)
                 if isinstance(data, (dict, list)):
-                    url_to_type.update(_extract_tuples_type_map(data))
+                    url_to_type.update(_extract_tuples_type_map(data, url_to_date))
             except Exception:
                 pass
 
-    documents = _extract_a99_documents(next_data) if next_data else []
+    documents, _ = _extract_a99_documents(next_data) if next_data else ([], set())
+
+    # Collect ALL image URLs from __NEXT_DATA__ to check for construction ones
+    all_img_urls: list[str] = []
+    if next_data:
+        _collect_from_json(next_data, all_img_urls, set())
+
+    constr_urls = [u for u in all_img_urls if "construction" in u.lower()
+                   or "site-photo" in u.lower() or "on-site" in u.lower()]
+
+    # Check for construction-related keys in __NEXT_DATA__ JSON
+    next_data_str = json.dumps(next_data) if next_data else ""
+    has_constr_keys = {k.strip('"'): (k in next_data_str) for k in _CONSTR_KEYS}
 
     # Sample: first 20 url→type pairs
     sample = {url[-80:]: t for url, t in list(url_to_type.items())[:20]}
 
     return {
         "next_data_found": bool(next_data),
-        "next_data_size_chars": len(str(next_data)) if next_data else 0,
+        "next_data_size_chars": len(next_data_str),
         "scripts_with_tuples_keyword": scripts_with_tuples,
+        "scripts_with_construction_keys": scripts_with_constr,
         "url_type_total": len(url_to_type),
         "distinct_types": sorted(set(url_to_type.values())),
+        "construction_urls_in_next_data": constr_urls[:20],
+        "construction_url_count": len(constr_urls),
+        "construction_keys_present": has_constr_keys,
+        "total_img_urls_in_next_data": len(all_img_urls),
+        "url_to_date_count": len(url_to_date),
         "sample_url_type": sample,
         "documents": documents,
+        "hint": (
+            "If construction_url_count is 0 and construction_keys_present shows all False, "
+            "construction images are NOT in the HTML. On the 99acres page: scroll to the "
+            "Construction Status section, wait for images to load, then use DevTools → "
+            "Elements → right-click <html> → Copy outerHTML (NOT Ctrl+U View Source)."
+        ),
     }
 
 
@@ -2088,6 +2123,9 @@ _A99_TUPLES_TYPE_TO_CLASS: dict[str, str] = {
 def _a99_tuples_classify(raw_type: str) -> str:
     """Map a raw 99acres tuples type name to our classification label.
     Falls back to Title-cased raw name if not in the lookup."""
+    # "Status as on : 16 Jan 2026" — the name IS the construction date label
+    if _STATUS_AS_ON_RE.search(raw_type):
+        return "Construction Status"
     return _A99_TUPLES_TYPE_TO_CLASS.get(raw_type.lower().strip(), raw_type.strip())
 
 
@@ -2133,15 +2171,18 @@ def _extract_tuples_type_map(
             return f"{month} {year}"
         return ""
 
+    _SKIP_VARIANT_KEYS = frozenset({"MOBILE", "mobile"})
+
     def _process_tuple(tup: dict, type_name: str, parent_date: str) -> None:
         """Map every variant URL of a single tuple item to its type (and date)."""
-        # Date can also live inside the tuple item itself
-        date = _get_date(tup) or parent_date
+        date = parent_date or _get_date(tup)
         variants = tup.get("variants")
         if isinstance(variants, dict):
             # Register ORIGINAL first so it wins for the canonical key
             _register(variants.get("ORIGINAL", ""), type_name, date)
-            for url in variants.values():
+            for key, url in variants.items():
+                if key in _SKIP_VARIANT_KEYS:
+                    continue   # never register mobile-quality variants
                 _register(url, type_name, date)
         else:
             # Fallback: any string value that looks like an image URL
@@ -2159,7 +2200,13 @@ def _extract_tuples_type_map(
                     if isinstance(tup, dict):
                         name = (tup.get("name") or "").strip()
                         if name:
-                            _process_tuple(tup, name, parent_date)
+                            # "Status as on : 16 Jan 2026" — date lives in the name itself
+                            date_in_name = ""
+                            if url_to_date is not None:
+                                mn = _STATUS_AS_ON_RE.search(name)
+                                if mn:
+                                    date_in_name = mn.group(1).strip()
+                            _process_tuple(tup, name, date_in_name or parent_date)
             for v in node.values():
                 _walk(v)
         elif isinstance(node, list):
@@ -2179,34 +2226,42 @@ _A99_DOCUMENT_KEYS: dict[str, str] = {
 }
 
 
-def _extract_a99_documents(obj: Any) -> list[dict]:
+def _extract_a99_documents(obj: Any) -> tuple[list[dict], set[str]]:
     """
     Walk JSON for document structures like:
       "brochureDocument": {"name": "Brochure", "variants": {"ORIGINAL": "<url>.pdf"}}
       "priceListDocument": {"name": "Payment Plan", "variants": {"ORIGINAL": "<url>.pdf"}}
 
-    Only returns entries whose URL ends in .pdf — never images.
-    Returns a list of {"name": <label>, "url": <original_url>} dicts.
+    Returns:
+      docs      — list of {"name": <label>, "url": <pdf_url>}
+      img_excl  — set of image URLs that live inside document nodes (brochure thumbnails
+                  etc.) that should NOT appear in the photo gallery.
     """
     docs: list[dict] = []
     seen: set[str] = set()
+    img_excl: set[str] = set()
+    _IMG_EXT_RE = re.compile(r'\.(?:jpe?g|png|webp|avif)(?:\?|$)', re.I)
 
     def _try_doc(label: str, node: Any) -> None:
         if not isinstance(node, dict):
             return
         name = node.get("name") or label
         variants = node.get("variants") or {}
-        url = ""
+        pdf_url = ""
         if isinstance(variants, dict):
-            # Always prefer ORIGINAL; fall back to first value
-            url = (variants.get("ORIGINAL") or variants.get("original")
-                   or next(iter(variants.values()), ""))
-        if not url:
-            url = node.get("url") or node.get("link") or ""
-        # Only accept PDF URLs
-        if url and url.lower().endswith(".pdf") and url not in seen:
-            seen.add(url)
-            docs.append({"name": name, "url": url})
+            pdf_url = (variants.get("ORIGINAL") or variants.get("original")
+                       or next((v for v in variants.values()
+                                if isinstance(v, str) and v.lower().endswith(".pdf")), ""))
+            # All other variants are image thumbnails — exclude from gallery
+            for v in variants.values():
+                if isinstance(v, str) and _IMG_EXT_RE.search(v):
+                    img_excl.add(v)
+                    img_excl.add(_canonical_a99_key(v))
+        if not pdf_url:
+            pdf_url = node.get("url") or node.get("link") or ""
+        if pdf_url and pdf_url.lower().endswith(".pdf") and pdf_url not in seen:
+            seen.add(pdf_url)
+            docs.append({"name": name, "url": pdf_url})
 
     def _walk(node: Any) -> None:
         if isinstance(node, dict):
@@ -2220,14 +2275,27 @@ def _extract_a99_documents(obj: Any) -> list[dict]:
                 _walk(item)
 
     _walk(obj)
-    return docs
+    return docs, img_excl
 
 
 # ── Date fields used by 99acres for construction status updates ────────────────
 _CONSTR_DATE_KEYS: frozenset[str] = frozenset({
     "date", "statusdate", "statuson", "updatedon",
     "photographydate", "statusmonth", "createddate",
+    # "uploaddate" intentionally excluded — it's an internal upload timestamp,
+    # not the construction update date shown to users ("Status as on : …")
 })
+
+# Matches "Status as on : 16 Jan 2026", "Status as on Oct, 2024", etc.
+# Used both to classify construction images and to extract their date.
+_STATUS_AS_ON_RE = re.compile(
+    r'(?:status\s+as\s+on|as\s+on)\s*[:\-]?\s*'
+    r'(\d{1,2}[\s/\-]+[A-Za-z]+[\s/\-]+\d{4}'   # 16 Jan 2026 / 16/01/2026
+    r'|[A-Za-z]+[\s,]+\d{4}'                      # January 2026
+    r'|\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}'          # 16/01/2026
+    r'|\d{4})',                                    # 2026
+    re.I,
+)
 
 
 def _extract_a99_construction_dates(obj: Any) -> dict[str, str]:
@@ -2301,6 +2369,85 @@ def _extract_a99_construction_dates(obj: Any) -> dict[str, str]:
     return url_to_date
 
 
+_CONSTR_PARENT_KEYS: frozenset[str] = frozenset({
+    "constructionimages", "constructionstatus", "constructionupdates",
+    "constructiondata", "statusimages", "updateimages", "sitephotos",
+    "constructionstatusimages", "constructionstatusupdates",
+    "constructionphotos", "progressimages", "progressupdates",
+})
+
+_CONSTR_IMG_URL_KEYS: frozenset[str] = frozenset({
+    "imageurl", "imgurl", "image_url", "img_url", "url",
+    "imagelink", "imglink", "image", "src", "link",
+    "originalurl", "original_url",
+})
+
+
+def _extract_a99_construction_flat(
+    obj: Any,
+    url_to_date: "dict[str, str] | None" = None,
+) -> list[str]:
+    """
+    Fallback extractor for construction images NOT stored in a 'tuples' structure.
+
+    Looks for dicts whose key is in _CONSTR_PARENT_KEYS (e.g. 'constructionImages')
+    and then collects any image URLs found within via common imageUrl/url/src keys.
+    Returns list of image URL strings.
+    """
+    urls: list[str] = []
+    seen: set[str] = set()
+
+    _IMG_EXT_RE = re.compile(r'\.(?:jpe?g|png|webp|avif)(?:\?|$)', re.I)
+
+    def _reg(url: str, date: str = "") -> None:
+        if url and isinstance(url, str) and url not in seen:
+            seen.add(url)
+            urls.append(url)
+            if url_to_date is not None and date:
+                url_to_date.setdefault(url, date)
+
+    def _collect_urls_from(node: Any, date: str = "") -> None:
+        if isinstance(node, str):
+            if _IMG_EXT_RE.search(node):
+                _reg(node, date)
+        elif isinstance(node, dict):
+            # Check for common image URL keys
+            for k, v in node.items():
+                kl = k.lower()
+                if kl in _CONSTR_IMG_URL_KEYS and isinstance(v, str) and _IMG_EXT_RE.search(v):
+                    _reg(v, date)
+                # variants dict (e.g. {"ORIGINAL": url, "LARGE": url})
+                if kl == "variants" and isinstance(v, dict):
+                    for vv in v.values():
+                        if isinstance(vv, str) and _IMG_EXT_RE.search(vv):
+                            _reg(vv, date)
+            for v in node.values():
+                _collect_urls_from(v, date)
+        elif isinstance(node, list):
+            for item in node:
+                _collect_urls_from(item, date)
+
+    def _walk(node: Any) -> None:
+        if isinstance(node, dict):
+            for k, v in node.items():
+                if k.lower() in _CONSTR_PARENT_KEYS:
+                    # Extract date context if available at this level
+                    date = ""
+                    if isinstance(v, dict):
+                        for dk, dv in v.items():
+                            if dk.lower() in _CONSTR_DATE_KEYS and isinstance(dv, str):
+                                date = dv.strip()
+                                break
+                    _collect_urls_from(v, date)
+                _walk(v)
+        elif isinstance(node, list):
+            for item in node:
+                _walk(item)
+
+    _walk(obj)
+    return urls
+
+
 # In-memory store for 99acres jobs
 acres99_jobs: dict = {}
 
@@ -2341,7 +2488,7 @@ def _collect_from_json(
     depth: int = 0,
 ) -> None:
     """Recursively walk JSON and collect image URLs + YouTube video IDs."""
-    if depth > 15:
+    if depth > 25:
         return
     if isinstance(obj, str) and len(obj) > 10:
         if re.search(r'\.(?:jpg|jpeg|png|webp|avif)(?:\?|$)', obj, re.I):
@@ -2390,7 +2537,7 @@ _A99_SIZE_RANK: dict[str, int] = {
     'thumbnail': 5, 'mini': 5, 'preview': 5, 'mobile': 6,
 }
 
-_A99_MOBILE_RE = re.compile(r'[/_-]mobile[/_.]', re.I)
+_A99_MOBILE_RE = re.compile(r'[/_-]mobile[/_.\-]|/mobile-', re.I)
 
 
 def _a99_size_rank(url: str) -> int:
@@ -2434,27 +2581,53 @@ def _get_project_cdn_path(img_urls: list[str]) -> str | None:
     return None
 
 
-def _is_project_image(url: str, project_cdn_path: str | None) -> bool:
+def _is_project_image(
+    url: str,
+    project_cdn_path: str | None,
+    known_media_urls: "frozenset[str] | None" = None,
+) -> bool:
     """
     Return True only if `url` is an image that belongs to this project.
     Rejects YouTube thumbnails, 99acres UI assets, and images from other
     projects on the same page (e.g. "Similar Projects" section).
+
+    Construction status images live at newprojects.99acres.com/media/<hash>/...
+    (NOT under /projects/).  Because the /media/ path has no project identifier,
+    we only accept those URLs when they appear in `known_media_urls` — i.e. they
+    were explicitly mapped by the project's own tuples structure.
     """
-    # YouTube thumbnails (used for video previews, not project photos)
+    # YouTube thumbnails
     if 'img.youtube.com' in url or 'ytimg.com' in url:
         return False
-    # Mobile-optimised variants (low-res, not useful alongside desktop sizes)
+    # Mobile-optimised variants (low-res)
     if _A99_MOBILE_RE.search(url):
         return False
     # 99acres branding / universal UI assets
     if re.search(r'(?:static|cdn)\.99acres\.com/universal', url, re.I):
         return False
-    if 'newprojects.99acres.com/media/' in url:
-        return False
-    # If we know the project CDN path, enforce it for 99acres CDN domains
-    if project_cdn_path:
-        if re.search(r'(?:newprojects|imagecdn)\.99acres\.com', url):
-            return f'/projects/{project_cdn_path}/' in url
+    # Any 99acres CDN URL that is NOT under /projects/ is either:
+    #  - a construction status image on newprojects /media/ → allowlisted via known_media_urls
+    #  - a listing (individual flat/apartment) image      → always rejected
+    if re.search(r'(?:newprojects|imagecdn)\.99acres\.com', url):
+        if '/projects/' in url:
+            # /projects/ URL — enforce CDN path when known
+            if project_cdn_path:
+                if f'/projects/{project_cdn_path}/' in url:
+                    return True
+                developer = project_cdn_path.split('/')[0]
+                if ('/construction/' in url or '/site-photo' in url) and \
+                   f'/projects/{developer}/' in url:
+                    return True
+                return False
+            return True   # CDN path unknown — pass through
+        else:
+            # Non-/projects/ URL (e.g. /media/, /media1/, /media2/ …)
+            # Only allow construction images that were explicitly mapped from this
+            # project's own tuples structure; everything else is a listing image.
+            if known_media_urls is not None:
+                canonical = _canonical_a99_key(url)
+                return url in known_media_urls or canonical in known_media_urls
+            return False
     return True
 
 
@@ -3203,12 +3376,6 @@ def _extract_a99_dom_images(
     return [{"url": u, "alt": a} for u, a in found.items()]
 
 
-# Matches "Status as on Oct, 2024", "Status as on: November 2023", etc.
-_STATUS_AS_ON_RE = re.compile(
-    r'(?:status\s+as\s+on|as\s+on)[:\s]+([A-Za-z]+[\s,]+\d{4}|\d{1,2}[\/\-]\d{4}|\d{4})',
-    re.I,
-)
-
 # CSS class fragments that 99acres uses for construction-status date labels
 _CONSTR_DATE_CLASS_PATTERNS = (
     "statusDate", "StatusDate", "status-date", "statusdate",
@@ -3222,15 +3389,20 @@ def _extract_a99_construction_dates_dom(
     soup: BeautifulSoup,
     page_url: str,
     url_to_date: dict[str, str],
-) -> int:
+    url_to_type: "dict[str, str] | None" = None,
+) -> tuple[int, list[str]]:
     """
     Walk the 99acres DOM to find construction-status date headers
-    ("Status as on Oct, 2024") and map all image URLs in the same
-    container to that date string.  Fills url_to_date in-place.
-    Returns the number of new URL→date mappings added.
+    ("Status as on : Oct, 2024") and map all images in the same group
+    to that date string and to type "Construction Status".
+
+    Fills url_to_date in-place.
+    If url_to_type is provided, also marks found URLs as "Construction Status".
+    Returns (new_date_mappings_count, new_image_urls_to_download).
     """
     before = len(url_to_date)
     seen_imgs: set[str] = set()
+    new_urls: list[str] = []
 
     def _register(raw_url: str, date_text: str) -> None:
         n = normalize_img_url(raw_url, page_url)
@@ -3242,21 +3414,42 @@ def _extract_a99_construction_dates_dom(
             ck = _canonical_a99_key(n)
             if ck:
                 url_to_date.setdefault(ck, date_text)
+            # Mark as Construction Status for classification
+            if url_to_type is not None:
+                url_to_type.setdefault(n, "Construction Status")
+                if ck:
+                    url_to_type.setdefault(ck, "Construction Status")
+            new_urls.append(n)
 
     def _imgs_in(container) -> list:
+        """Collect image URLs from all <img> and data-src/background-image attrs."""
         imgs = []
+        _IMG_ATTRS = ("src", "data-src", "data-original", "data-lazy",
+                      "data-image", "data-zoom-image")
         for img in container.find_all("img"):
-            for attr in ("src", "data-src", "data-original", "data-lazy"):
+            for attr in _IMG_ATTRS:
                 raw = img.get(attr, "")
                 if raw:
                     imgs.append(raw)
                     break
+        # Also catch background-image: url(...)
+        for tag in container.find_all(style=True):
+            for m in _BG_IMG_RE.finditer(tag["style"]):
+                imgs.append(m.group(1))
         return imgs
 
-    def _apply_date_to_container(container, date_text: str) -> None:
-        """Walk up from container until we find a parent that has ≥1 images."""
-        node = container
-        for _ in range(8):
+    def _apply_date_to_section(anchor_el, date_text: str) -> None:
+        """
+        From the anchor element (date label), find the enclosing group that
+        contains both this date label AND the images for that update.
+
+        Strategy:
+        1. Walk UP to find a parent that contains ≥1 image — that's the update group.
+        2. Collect ALL images within that group.
+        3. Stop walking up at 10 levels to avoid pulling in unrelated sections.
+        """
+        node = anchor_el
+        for _ in range(10):
             if node is None:
                 break
             urls = _imgs_in(node)
@@ -3266,7 +3459,7 @@ def _extract_a99_construction_dates_dom(
                 return
             node = getattr(node, "parent", None)
 
-    # ── Strategy A: find elements whose class contains a date-class pattern ────
+    # ── Strategy A: elements whose CSS class contains a date-class pattern ────
     for el in soup.find_all(True):
         cls = " ".join(el.get("class") or [])
         if not any(p in cls for p in _CONSTR_DATE_CLASS_PATTERNS):
@@ -3274,9 +3467,9 @@ def _extract_a99_construction_dates_dom(
         date_text = el.get_text(strip=True)[:80]
         if not date_text:
             continue
-        _apply_date_to_container(el, date_text)
+        _apply_date_to_section(el, date_text)
 
-    # ── Strategy B: find text nodes matching "Status as on <date>" ─────────────
+    # ── Strategy B: text nodes matching "Status as on <date>" ────────────────
     for text_node in soup.find_all(string=_STATUS_AS_ON_RE):
         m = _STATUS_AS_ON_RE.search(text_node)
         if not m:
@@ -3286,9 +3479,24 @@ def _extract_a99_construction_dates_dom(
             continue
         parent = getattr(text_node, "parent", None)
         if parent:
-            _apply_date_to_container(parent, date_text)
+            _apply_date_to_section(parent, date_text)
 
-    return len(url_to_date) - before
+    # ── Strategy C: any element whose visible text matches "Status as on" ────
+    # Catches cases where the regex doesn't match as a text node (e.g. inside span)
+    for el in soup.find_all(True):
+        text = el.get_text(" ", strip=True)
+        m = _STATUS_AS_ON_RE.search(text)
+        if not m:
+            continue
+        # Only process leaf-ish elements (short text) to avoid huge containers
+        if len(text) > 120:
+            continue
+        date_text = m.group(1).strip()
+        if not date_text:
+            continue
+        _apply_date_to_section(el, date_text)
+
+    return len(url_to_date) - before, new_urls
 
 
 async def _download_a99_image(
@@ -3388,6 +3596,7 @@ async def _do_scrape_99acres(
         html_str = html_source or ""
         url_to_type: dict[str, str] = {}   # image URL → 99acres type label (from tuples)
         url_to_date: dict[str, str] = {}   # construction status: image URL → date string
+        doc_img_excl: set[str] = set()     # brochure/doc thumbnail images to exclude
 
         # ── Step 1: Try 99acres internal APIs ─────────────────────────────────
         log("Step 1: Trying internal APIs…")
@@ -3402,7 +3611,7 @@ async def _do_scrape_99acres(
         async with httpx.AsyncClient(
             timeout=15, verify=False, follow_redirects=True
         ) as client:
-            for endpoint in ("detail", "gallery", "amenities", "floorplans"):
+            for endpoint in ("detail", "gallery", "amenities", "floorplans", "construction", "constructionstatus", "updates"):
                 ep_url = f"https://www.99acres.com/api/v2/project/{npxid}/{endpoint}"
                 try:
                     r = await client.get(ep_url, headers=api_headers)
@@ -3421,6 +3630,10 @@ async def _do_scrape_99acres(
                             for iu in imgs:
                                 all_img_entries.append((iu, ""))
                             all_vid_ids.update(vids)
+                            # For construction endpoints, also extract type + date mappings
+                            if endpoint in ("construction", "constructionstatus", "updates"):
+                                url_to_type.update(_extract_tuples_type_map(data, url_to_date))
+                                for _k,_v in _extract_a99_construction_dates(data).items(): url_to_date.setdefault(_k,_v)
                         except Exception as je:
                             log(f"  API /{endpoint}: JSON error — {je}")
                     else:
@@ -3559,7 +3772,8 @@ async def _do_scrape_99acres(
             doc_seen_urls: set[str] = set()
             documents: list[dict] = []
 
-            def _merge_docs(new_docs: list[dict]) -> None:
+            def _merge_docs(new_docs: list[dict], new_excl: set[str]) -> None:
+                doc_img_excl.update(new_excl)
                 for d in new_docs:
                     if d["url"] not in doc_seen_urls:
                         doc_seen_urls.add(d["url"])
@@ -3568,29 +3782,53 @@ async def _do_scrape_99acres(
             # Start with __NEXT_DATA__ for tuples, documents, and construction dates
             if next_data:
                 url_to_type.update(_extract_tuples_type_map(next_data, url_to_date))
+                for _k,_v in _extract_a99_construction_dates(next_data).items(): url_to_date.setdefault(_k,_v)
                 log(f"  __NEXT_DATA__ tuples scan: {len(url_to_type)} URLs mapped, "
                     f"{len(url_to_date)} with dates")
-                _merge_docs(_extract_a99_documents(next_data))
+                _merge_docs(*_extract_a99_documents(next_data))
+                # Also try flat (non-tuples) construction image structures
+                flat_constr = _extract_a99_construction_flat(next_data, url_to_date)
+                if flat_constr:
+                    for iu in flat_constr:
+                        all_img_entries.append((iu, ""))
+                        url_to_type.setdefault(iu, "Construction Status")
+                        url_to_type.setdefault(_canonical_a99_key(iu), "Construction Status")
+                    log(f"  __NEXT_DATA__ flat construction scan: {len(flat_constr)} URLs")
 
             _decoder = json.JSONDecoder()
+            _CONSTR_KEYS = ('"constructionImages"', '"constructionStatus"',
+                            '"constructionUpdates"', '"constructionData"',
+                            '"statusImages"', '"updateImages"', '"sitePhotos"')
             for script in soup.find_all("script"):
                 content = script.string or ""
                 has_tuples = '"tuples"' in content
+                has_constr = any(k in content for k in _CONSTR_KEYS)
                 has_docs = any(k in content for k in _A99_DOCUMENT_KEYS)
-                if not has_tuples and not has_docs:
+                if not has_tuples and not has_constr and not has_docs:
                     continue
                 # Strategy 1: whole script is pure JSON
                 try:
                     data = json.loads(content)
-                    if has_tuples:
+                    if has_tuples or has_constr:
                         before_t = len(url_to_type)
                         before_d = len(url_to_date)
                         url_to_type.update(_extract_tuples_type_map(data, url_to_date))
+                        for _k,_v in _extract_a99_construction_dates(data).items(): url_to_date.setdefault(_k,_v)
+                        extra_imgs: list[str] = []
+                        if has_constr:
+                            _collect_from_json(data, extra_imgs, set())
+                            for iu in extra_imgs:
+                                all_img_entries.append((iu, ""))
+                            flat_c = _extract_a99_construction_flat(data, url_to_date)
+                            for iu in flat_c:
+                                all_img_entries.append((iu, ""))
+                                url_to_type.setdefault(iu, "Construction Status")
+                                url_to_type.setdefault(_canonical_a99_key(iu), "Construction Status")
                         if len(url_to_type) > before_t:
                             log(f"  Inline JSON script: +{len(url_to_type)-before_t} URLs, "
                                 f"+{len(url_to_date)-before_d} dates")
                     if has_docs:
-                        _merge_docs(_extract_a99_documents(data))
+                        _merge_docs(*_extract_a99_documents(data))
                     continue
                 except Exception:
                     pass
@@ -3601,13 +3839,24 @@ async def _do_scrape_99acres(
                     try:
                         data, _ = _decoder.raw_decode(content, pos)
                         if isinstance(data, (dict, list)):
-                            if has_tuples:
+                            if has_tuples or has_constr:
                                 before = len(url_to_type)
                                 url_to_type.update(_extract_tuples_type_map(data, url_to_date))
+                                for _k,_v in _extract_a99_construction_dates(data).items(): url_to_date.setdefault(_k,_v)
+                                if has_constr:
+                                    extra_imgs2: list[str] = []
+                                    _collect_from_json(data, extra_imgs2, set())
+                                    for iu in extra_imgs2:
+                                        all_img_entries.append((iu, ""))
+                                    flat_c2 = _extract_a99_construction_flat(data, url_to_date)
+                                    for iu in flat_c2:
+                                        all_img_entries.append((iu, ""))
+                                        url_to_type.setdefault(iu, "Construction Status")
+                                        url_to_type.setdefault(_canonical_a99_key(iu), "Construction Status")
                                 if len(url_to_type) > before:
                                     log(f"  Inline script (pos {pos}): +{len(url_to_type)-before} URLs")
                             if has_docs:
-                                _merge_docs(_extract_a99_documents(data))
+                                _merge_docs(*_extract_a99_documents(data))
                     except Exception:
                         pass
 
@@ -3639,10 +3888,16 @@ async def _do_scrape_99acres(
                 all_img_entries.append((e["url"], e.get("alt", "")))
             log(f"  DOM images: {len(dom_imgs)}")
 
-            # Construction-status dates from DOM ("Status as on Oct, 2024")
-            n_dom_dates = _extract_a99_construction_dates_dom(soup, url, url_to_date)
-            if n_dom_dates:
-                log(f"  Construction dates (DOM): +{n_dom_dates} URLs → date")
+            # Construction-status dates + image discovery from DOM
+            # "Status as on : <date>" labels are the strongest signal for construction images.
+            n_dom_dates, dom_constr_urls = _extract_a99_construction_dates_dom(
+                soup, url, url_to_date, url_to_type
+            )
+            if dom_constr_urls:
+                for cu in dom_constr_urls:
+                    all_img_entries.append((cu, ""))
+                log(f"  Construction DOM: +{len(dom_constr_urls)} images, "
+                    f"+{n_dom_dates} date mappings from 'Status as on' sections")
 
             # Videos from DOM
             for yt in extract_youtube_links(soup, html_str):
@@ -3683,6 +3938,12 @@ async def _do_scrape_99acres(
             f"RERA={len(dom_result.get('rera_ids', []))} | "
             f"possession={dom_result.get('project_details', {}).get('possession_date')!r}")
 
+        # ── Cap raw URL pool to avoid runaway processing ─────────────────────────
+        _MAX_IMG_ENTRIES = 50_000
+        if len(all_img_entries) > _MAX_IMG_ENTRIES:
+            log(f"  Capping URL pool: {len(all_img_entries)} → {_MAX_IMG_ENTRIES}")
+            all_img_entries = all_img_entries[:_MAX_IMG_ENTRIES]
+
         # ── Step 6: Filter to this project + deduplicate size variants ──────────
         # Strategy:
         #  1. Derive the project's CDN path from JSON-LD images (most reliable).
@@ -3694,14 +3955,40 @@ async def _do_scrape_99acres(
         project_cdn_path = _get_project_cdn_path(jld_imgs)
         log(f"Step 6: project CDN path = {project_cdn_path!r}")
 
+        # Build allowlist for /media/ URLs: only those explicitly mapped by the
+        # project's own tuples structure (url_to_type).  This prevents similar-project
+        # construction images (also on /media/) from leaking in.
+        known_media_urls: frozenset[str] = frozenset(
+            u for u in url_to_type
+            if 'newprojects.99acres.com/media/' in u
+        )
+        if known_media_urls:
+            log(f"  Known /media/ construction URLs (allowlist): {len(known_media_urls)}")
+
+        # Diagnostic: count how many total entries mention "construction"
+        constr_before = sum(1 for iu, _ in all_img_entries
+                            if "construction" in iu.lower() or "site-photo" in iu.lower())
+        if constr_before:
+            log(f"  Pre-filter: {constr_before} construction-related URLs in pool")
+
+        if doc_img_excl:
+            log(f"  Brochure/doc thumbnail exclusion list: {len(doc_img_excl)} URLs")
+
         canonical_best: dict[str, tuple[str, str, int]] = {}
         skipped_other = 0
+        skipped_constr = 0
         for iu, alt in all_img_entries:
             iu = iu.strip()
             if not iu:
                 continue
-            if not _is_project_image(iu, project_cdn_path):
+            # Skip brochure/document thumbnail images
+            if iu in doc_img_excl or _canonical_a99_key(iu) in doc_img_excl:
                 skipped_other += 1
+                continue
+            if not _is_project_image(iu, project_cdn_path, known_media_urls):
+                skipped_other += 1
+                if "construction" in iu.lower():
+                    skipped_constr += 1
                 continue
             key = _canonical_a99_key(iu)
             rank = _a99_size_rank(iu)
@@ -3710,8 +3997,16 @@ async def _do_scrape_99acres(
                 canonical_best[key] = (iu, alt, rank)
 
         unique = [(url, alt) for url, alt, _ in canonical_best.values()]
+        constr_after = sum(1 for iu, _ in unique
+                           if "construction" in iu.lower() or "site-photo" in iu.lower())
         log(f"Step 6: {len(unique)} unique images after filtering "
-            f"(skipped {skipped_other} other-project / UI URLs)…")
+            f"(skipped {skipped_other} other-project / UI URLs"
+            f"{f', incl. {skipped_constr} construction' if skipped_constr else ''})")
+        if constr_after:
+            log(f"  Post-filter: {constr_after} construction images kept")
+        elif constr_before and not constr_after:
+            log(f"  WARNING: {constr_before} construction URLs were filtered out by CDN path check!"
+                f" CDN path: {project_cdn_path!r}")
         job["total_images"] = len(unique)
 
         dl_headers = {

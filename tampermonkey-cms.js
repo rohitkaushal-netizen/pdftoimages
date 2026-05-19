@@ -5,7 +5,7 @@
 // @description  Reads images queued by the PDF extraction tool and auto-fills the CMS image upload form one by one — fully automatic.
 // @author       Housing.com
 // @match        https://cms.housing.com/project_img_add.php*
-// @connect      localhost
+// @connect      pdftoimages-ljco.onrender.com
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
 // @run-at       document-idle
@@ -71,7 +71,7 @@
     '99Ac':   '99 Acres',
   };
 
-  const API          = 'http://localhost:8000';
+  const API          = 'https://pdftoimages-ljco.onrender.com';
   const SS_MODE      = '_cms_auto_fill';   // sessionStorage: auto mode active
   const SS_SAVED     = '_cms_just_saved';  // sessionStorage: form was submitted
 

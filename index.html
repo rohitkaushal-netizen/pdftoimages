@@ -404,13 +404,10 @@
     .badge-location-map2      { background: #e0f2fe; color: #0369a1; }
     .badge-amenities          { background: #d1fae5; color: #065f46; }
     .badge-construction-status { background: #fef9c3; color: #854d0e; }
-    .badge-status-date { background: #fff7ed; color: #c2410c; font-size: .72rem; }
-    /* Date overlay on construction status image thumbnails */
-    .construction-date-overlay {
-      position: absolute; top: 8px; left: 8px; z-index: 3;
-      background: rgba(0,0,0,.62); color: #fff;
-      font-size: .67rem; font-weight: 700; padding: 2px 7px;
-      border-radius: 99px; pointer-events: none; letter-spacing: .2px;
+    .construction-date-label {
+      font-size: .76rem; font-weight: 600; color: #92400e;
+      background: #fef3c7; border-radius: 4px;
+      padding: 2px 7px; margin-bottom: 4px; display: inline-block;
     }
     .badge-aerial-view        { background: #ecfdf5; color: #047857; }
     .badge-interior           { background: #fdf4ff; color: #86198f; }
@@ -759,8 +756,10 @@
       <summary>Paste HTML manually — for bot-protected pages</summary>
       <div>
         <p style="font-size:.84rem;color:var(--sub);margin-bottom:10px">
-          If the page is bot-protected, open it in your browser, press <strong>Ctrl+U</strong> / <strong>Cmd+U</strong> (View Source), copy all, and paste below.
-          For more images, open DevTools → Elements, right-click <code>&lt;html&gt;</code> → Copy outerHTML and paste.
+          Open the 99acres page in your browser, then use DevTools → Elements, right-click <code>&lt;html&gt;</code> → Copy outerHTML and paste below. (Ctrl+U View Source often misses lazy-loaded images.)
+        </p>
+        <p style="font-size:.82rem;background:#fef9c3;color:#854d0e;border-radius:6px;padding:8px 10px;margin-bottom:10px">
+          <strong>Construction Status images:</strong> Before copying HTML, scroll down to the <em>Construction Status</em> tab on the 99acres page and wait for those images to load. Then copy outerHTML from DevTools.
         </p>
         <textarea id="acres99-html-paste" rows="5"
           placeholder="Paste full page HTML (outerHTML or View Source) here…"></textarea>
@@ -1048,11 +1047,17 @@ const CAT_PRIMARY_TYPES = [
   'Top View (Aerial View)','Reception Area','Payment Plan','Project Logo','QR Code',
 ];
 const CAT_AMENITY_SUBTYPES = [
-  '24 X 7 Security','24x7 CCTV Surveillance','24X7 Water Supply','Acupressure Center','Acupressure Pathway','Adventure Club','Aerobics Room','Air Conditioned','Amphitheater','Amusement Area','Anti-termite Treatment','Archery Club','Assembly Area','ATM','Auto Service Station','Automated Car Wash','Ayurveda Centre','Badminton Court','Banquet Hall','Bar/ Chill-out Lounge','Barbecue Area','Basketball Court','Beach access','Beach Volley Ball Court','Billiards/ Snooker Table','Board Games','Boom Barriers','Bowling Alley','Bus Shelter','Business Center','Business Suites','Cafeteria','Car Lift','Car Parking','Car Wash Area','Card Room','Carrom','Central Cooling System','Changing Room','Chess Board',"Children's play area",'Cigar Lounge','Cineplex','Closed Car Parking','Club House','Club Rooftop','Community Buildings','Community Hall','Compound Wall','Concierge Service','Conference Room','Cricket arena','Cricket Pitch','Cycling & Jogging Track','Dart Board','Day Care Center','DG Availability','Discotheque','Dock','Doctor on call','Double Glazed Windows','Earthquake Resistant Structure','Electrical meter Room','Electrification','Energy management','Entrance Gate Security Cabin','Entrance Lobby','Escalators','EV Charging Point','Exotic Plantation','Facilities for Disabled','Feng Shui','Fire Alarm','Fire Escape Staircases','Fire Fighting System','Fire Protection And Fire Safety Requirements','Fire Retardant Structure','Fire Sprinklers','Fitness Center','Flower Garden','Food Court','Foosball','Football Field','Footpaths/ Pedestrian','Fountains','Full Power Backup','Futsal','Garbage Disposal','Gated Community','Gazebo','Golf Course','Grade A Building','Greenhouse Farming','Grocery Shop','Gymnasium','Health Facilities','Helipad','High Speed Elevators','High-tech Alarm System','Hockey Ground','Hospital','Indoor Games','Infinity Pool','Intercom','Internal Roads & Footpaths','Internet/ Wi-Fi','Jacuzzi','Jogging Track',"Kid's Pool",'Landscape Garden and Tree Planting','Landscaped Gardens','Laundromat','Lawn Tennis Court','Letter Box','Library','Lift(s)','Light shows','Lockers','Maintenance Staff','Manicured Garden','Medical Facilities','Medical Store/ Pharmacy','Milk Booth','Mini Theatre','Motion Sensor','Multi - Level Parking','Multipurpose Hall','Multipurpose Room','Natural Pond','Nature Club','Observatories','Open Air Theatre','Open Car Parking','Open Gym','Open Parking','Opera House','Organic Farming','Partial Power Backup','Party Hall','Party Lawn','Paved Compound','Pergola','Pet Grooming','Petrol Pump','Pickleball Court','Piped Gas Connection','Place for Worship','Polo Ground','Projector Wall','Race Course','Rain Water Harvesting','Reading Lounge','Receiving Station','Reception/ Waiting Room','Recreation Facilities','Reflexology Park','Reserved Parking','Rest House for Drivers','Restaurant','RO Water System','Salon','Sauna Bath','School','Security Cabin','Security Guards','Semi Open Car Parking','Senior Citizen Sitout','Sensor operated doors and lifts','Server Room','Service Lift','Sewage Treatment Plant','Shooting range','Shopping Mall','Skating Rink','Smoke Detectors','Solar Lighting','Solar Power System','Solar Water Heating','Solid Waste Management And Disposal','Spa','Spa/ Sauna/ Steam','Sports Area','Sports Complex','Sports Facility','Squash Court','Staff Quarter','Steam Room','Storm Water Drains','Street Lighting','Sub-Station','Sun Bathing','Sun Deck','Swimming Pool','Table Tennis','Taxi/ Bus Terminal','Temple','Tennis Court','Terrace Garden','Theme Park','Two Wheeler Parking','Utility Shops','Vaastu Compliant','Valet Parking','Vastu Compliant','Vertical Garden','Video Door Security','Visitor Parking','Volleyball Court','Waiting Lounge','Wall Climbing','Water Conservation, Rain water Harvesting','Water Softener Plant','Water Sports','Water Storage','Water Supply','Yoga/ Meditation Area','Zebra Crossing',
+  '24 X 7 Security','24x7 CCTV Surveillance','24X7 Water Supply','Acupressure Center','Acupressure Pathway','Adventure Club','Aerobics Room','Air Conditioned','Amphitheater','Amusement Area','Anti-termite Treatment','Archery Club','Assembly Area','ATM','Auto Service Station','Automated Car Wash','Ayurveda Centre','Badminton Court','Banquet Hall','Bar/ Chill-out Lounge','Barbecue Area','Basketball Court','Beach access','Beach Volley Ball Court','Billiards/ Snooker Table','Board Games','Boom Barriers','Bowling Alley','Bus Shelter','Business Center','Business Suites','Cafeteria','Car Lift','Car Parking','Car Wash Area','Card Room','Carrom','Central Cooling System','Changing Room','Chess Board',"Children's play area",'Cigar Lounge','Cineplex','Closed Car Parking','Club House','Club Rooftop','Community Buildings','Community Hall','Compound Wall','Concierge Service','Conference Room','Cricket arena','Cricket Pitch','Cycling & Jogging Track','Dart Board','Day Care Center','DG Availability','Discotheque','Dock','Doctor on call','Double Glazed Windows','Earthquake Resistant Structure','Electrical meter Room','Electrification','Energy management','Entrance Gate Security Cabin','Entrance Lobby','Escalators','EV Charging Point','Exotic Plantation','Facilities for Disabled','Feng Shui','Fire Alarm','Fire Escape Staircases','Fire Fighting System','Fire Protection And Fire Safety Requirements','Fire Retardant Structure','Fire Sprinklers','Fitness Center','Flower Garden','Food Court','Foosball','Football Field','Footpaths/ Pedestrian','Fountains','Full Power Backup','Futsal','Garbage Disposal','Gated Community','Gazebo','Golf Course','Grade A Building','Greenhouse Farming','Grocery Shop','Gymnasium','Health Facilities','Helipad','High Speed Elevators','High-tech Alarm System','Hockey Ground','Hospital','Indoor Games','Infinity Pool','Intercom','Internal Roads & Footpaths','Internet/ Wi-Fi','Jacuzzi','Jogging Track',"Kid's Pool",'Landscape Garden and Tree Planting','Landscaped Gardens','Laundromat','Lawn Tennis Court','Letter Box','Library','Lift(s)','Light shows','Lockers','Maintenance Staff','Manicured Garden','Medical Facilities','Medical Store/ Pharmacy','Milk Booth','Mini Theatre','Motion Sensor','Multi - Level Parking','Multipurpose Hall','Multipurpose Room','Natural Pond','Nature Club','Observatories','Open Air Theatre','Open Car Parking','Open Gym','Open Parking','Opera House','Organic Farming','Partial Power Backup','Party Hall','Party Lawn','Paved Compound','Pergola','Pet Grooming','Petrol Pump','Pickleball Court','Piped Gas Connection','Place for Worship','Polo Ground','Projector Wall','Race Course','Rain Water Harvesting','Reading Lounge','Receiving Station','Reception/ Waiting Room','Recreation Facilities','Reflexology Park','Reserved Parking','Rest House for Drivers','Restaurant','RO Water System','Salon','Sauna Bath','School','Security Cabin','Security Guards','Semi Open Car Parking','Senior Citizen Sitout','Sensor operated doors and lifts','Server Room','Service Lift','Sewage Treatment Plant','Shooting range','Shopping Mall','Skating Rink','Smoke Detectors','Solar Lighting','Solar Power System','Solar Water Heating','Solid Waste Management And Disposal','Spa','Spa/ Sauna/ Steam','Sports Area','Sports Complex','Sports Facility','Squash Court','Staff Quarter','Steam Room','Storm Water Drains','Street Lighting','Sub-Station','Sun Bathing','Sun Deck','Swimming Pool','Table Tennis','Taxi/ Bus Terminal','Temple','Tennis Court','Terrace Garden','Theme Park','Two Wheeler Parking','Utility Shops','Vaastu Compliant','Valet Parking','Vastu Compliant','Vertical Garden','Video Door Security','Visitor Parking','Volleyball Court','Waiting Lounge','Wall Climbing','Water Conservation, Rain water Harvesting','Water Softener Plant','Water Sports','Water Storage','Water Supply','Yoga/ Meditation Area','Zebra Crossing','Others',
 ];
 const CAT_MAIN_OTHER_SUBTYPES = [
   'Living Area','Dining Area','Bedroom','Bathroom','Kitchen','Balcony',
   'Lobby','Plot','Kids Bedroom','Terrace','Pooja Room','Study Room','Servant Room',
+];
+const CAT_PAYMENT_PLAN_SUBTYPES = [
+  'Construction Linked Payment (CLP)',
+  'Time Linked Payment (TLP)',
+  'Subvention Scheme',
+  'Down Payment',
 ];
 
 function getCat(id) { return imageCategories.get(id) || {type:'', subtype:''}; }
@@ -1064,11 +1069,11 @@ function setCatType(id, type) {
   // Refresh secondary dropdown
   const subWrap = document.getElementById(`cat-sub-${id}`);
   if (!subWrap) return;
-  const needsSub = type === 'Amenities' || type === 'Main Other';
+  const needsSub = type === 'Amenities' || type === 'Main Other' || type === 'Payment Plan';
   subWrap.style.display = needsSub ? 'block' : 'none';
   if (needsSub) {
-    const opts = type === 'Amenities' ? CAT_AMENITY_SUBTYPES : CAT_MAIN_OTHER_SUBTYPES;
-    const label = type === 'Amenities' ? 'Select Amenity…' : 'Select Sub-type…';
+    const opts = type === 'Amenities' ? CAT_AMENITY_SUBTYPES : type === 'Payment Plan' ? CAT_PAYMENT_PLAN_SUBTYPES : CAT_MAIN_OTHER_SUBTYPES;
+    const label = type === 'Amenities' ? 'Select Amenity…' : type === 'Payment Plan' ? 'Select Payment Plan Type…' : 'Select Sub-type…';
     subWrap.querySelector('select').innerHTML =
       `<option value="">${label}</option>` +
       opts.map(o => `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join('');
@@ -1106,9 +1111,9 @@ function catDropdownsHtml(id) {
   const priOpts = CAT_PRIMARY_TYPES.map(t =>
     `<option value="${escapeHtml(t)}" ${type === t ? 'selected' : ''}>${escapeHtml(t)}</option>`
   ).join('');
-  const needsSub = type === 'Amenities' || type === 'Main Other';
-  const subOpts  = type === 'Amenities' ? CAT_AMENITY_SUBTYPES : CAT_MAIN_OTHER_SUBTYPES;
-  const subLabel = type === 'Amenities' ? 'Select Amenity…' : 'Select Sub-type…';
+  const needsSub = type === 'Amenities' || type === 'Main Other' || type === 'Payment Plan';
+  const subOpts  = type === 'Amenities' ? CAT_AMENITY_SUBTYPES : type === 'Payment Plan' ? CAT_PAYMENT_PLAN_SUBTYPES : CAT_MAIN_OTHER_SUBTYPES;
+  const subLabel = type === 'Amenities' ? 'Select Amenity…' : type === 'Payment Plan' ? 'Select Payment Plan Type…' : 'Select Sub-type…';
   const subOptsHtml = needsSub
     ? subOpts.map(o => `<option value="${escapeHtml(o)}" ${subtype===o?'selected':''}>${escapeHtml(o)}</option>`).join('')
     : '';
@@ -2379,6 +2384,46 @@ const A99_BADGE_CLASS = {
   'Other':                  'badge-other',
 };
 
+const A99_CLASSIFICATION_TO_CMS_TYPE = {
+  'Photos': 'Elevation', 'Elevation': 'Elevation', 'Render / Elevation': 'Elevation', 'Photo': 'Elevation',
+  'Floor Plan': 'Layout Plan', 'Floor Plans': 'Layout Plan', 'Unit Plan': 'Layout Plan', 'Unit Plans': 'Layout Plan',
+  'Master Plan': 'Master Plan', 'Cluster Plan': 'Cluster Plan', 'Site Plan': 'Site Plan',
+  'Location Map': 'Location Plan', 'Location Plan': 'Location Plan',
+  'Amenities': 'Amenities', 'Amenity Photo': 'Amenities',
+  'Construction Status': 'Construction Status', 'Construction Progress': 'Construction Status',
+  'Aerial View': 'Top View (Aerial View)', 'Aerial Photos': 'Top View (Aerial View)',
+  'Interior': 'Main Other', 'Interior Photo': 'Main Other', 'Interior Photos': 'Main Other', 'Other': 'Main Other',
+  '3D Render': 'Creative Image', '3D Renders': 'Creative Image',
+  'Main Other': 'Main Other', 'Creative Image': 'Creative Image',
+};
+
+// Infer CMS primary type + optional subtype from a raw 99acres classification label.
+// For labels not in the direct map, tries case-insensitive matching against amenity subtypes.
+function inferCmsType(classification) {
+  if (!classification) return null;
+  const direct = A99_CLASSIFICATION_TO_CMS_TYPE[classification];
+  if (direct) return { type: direct, subtype: '' };
+
+  const cls = classification.toLowerCase().trim();
+
+  // Exact case-insensitive match against amenity subtypes
+  const exactAmenity = CAT_AMENITY_SUBTYPES.find(s => s.toLowerCase() === cls);
+  if (exactAmenity) return { type: 'Amenities', subtype: exactAmenity };
+
+  // Partial match: subtype contains the classification word or vice versa
+  const partialAmenity = CAT_AMENITY_SUBTYPES.find(s => {
+    const sl = s.toLowerCase();
+    return sl.includes(cls) || cls.includes(sl);
+  });
+  if (partialAmenity) return { type: 'Amenities', subtype: partialAmenity };
+
+  // If it doesn't look like a known primary type, treat unknown labels as Amenities (no subtype)
+  const knownPrimary = Object.values(A99_CLASSIFICATION_TO_CMS_TYPE);
+  if (!knownPrimary.includes(classification)) return { type: 'Amenities', subtype: '' };
+
+  return null;
+}
+
 // Build filter pills dynamically from whatever classifications are present
 function buildA99Pills() {
   const present = [...new Set(a99AllImages.map(i => i.classification).filter(Boolean))];
@@ -2422,6 +2467,10 @@ function renderA99Gallery() {
 
   a99BulkUpdate();
   gallery.innerHTML = imgs.map((img, idx) => {
+    if (!imageCategories.has(img.id) && img.classification) {
+      const inferred = inferCmsType(img.classification);
+      if (inferred) imageCategories.set(img.id, { type: inferred.type, subtype: inferred.subtype });
+    }
     const cls = img.classification || 'Photo';
     const badgeCss = A99_BADGE_CLASS[cls] || 'badge-other';
     const isFloorPlan = ['Floor Plan','Unit Plan','Master Plan','Cluster Plan','Site Plan'].includes(cls);
@@ -2431,19 +2480,19 @@ function renderA99Gallery() {
     const sel = a99Selected.has(img.id) ? ' selected' : '';
     const bhkBadge = img.bhk_label
       ? `<span class="badge" style="background:#dbeafe;color:#1d4ed8">${img.bhk_label}</span>` : '';
-    const dateBadge = img.status_date
-      ? `<span class="badge badge-status-date" title="Construction update date">📅 ${img.status_date}</span>` : '';
+    const constructionDateLabel = (img.status_date && cls === 'Construction Status')
+      ? `<div class="construction-date-label">${img.status_date}</div>` : '';
     return `
       <div class="img-card${isFloorPlan ? ' a99-fp-card' : ''}${sel}" id="a99card-${img.id}" style="position:relative">
         <div class="card-check">
           <input type="checkbox" ${checked} onchange="toggleA99Select('${img.id}',this.checked)" />
         </div>
         <span class="src-badge src-99ac">99Ac</span>
-        ${img.status_date ? `<span class="construction-date-overlay">${img.status_date}</span>` : ''}
         <div class="img-thumb" onclick="openLightbox(a99FilteredImages,${idx},id=>'/image/${a99SessionId}/'+id)" title="Click to preview">
           <img src="${src}" alt="${name}" loading="lazy" onerror="this.parentElement.style.background='#f0f9ff'" />
         </div>
         <div class="img-body">
+          ${constructionDateLabel}
           <input class="img-name-edit" value="${name.replace(/"/g,'&quot;')}" title="Click to rename" onchange="setRename('${img.id}',this.value)" />
           ${catDropdownsHtml(img.id)}
           <div class="img-meta">
@@ -2454,7 +2503,6 @@ function renderA99Gallery() {
             ${img.format ? `<span class="badge badge-fmt">${img.format.toUpperCase()}</span>` : ''}
             <span class="badge ${badgeCss}">${cls}</span>
             ${bhkBadge}
-            ${dateBadge}
           </div>
           <div class="card-actions">
             <button class="card-copy" onclick="copyImageToClipboard('${src}')">⧉ Copy</button>

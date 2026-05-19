@@ -7,7 +7,7 @@
 // @match        https://cms.housing.com/project_plan_add.php*
 // @match        https://cms.housing.com/project_plans_add.php*
 // @match        https://cms.housing.com/project_img_add.php*
-// @connect      localhost
+// @connect      pdftoimages-ljco.onrender.com
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
 // @run-at       document-idle
@@ -16,7 +16,7 @@
 (function () {
   'use strict';
 
-  const API = 'http://localhost:8000';
+  const API = 'https://pdftoimages-ljco.onrender.com';
 
   const SS_MODE = '_cms_plan_auto_fill';
   const SS_SAVED = '_cms_plan_just_saved';
@@ -96,7 +96,14 @@
     'Valet Parking', 'Vastu Compliant', 'Vertical Garden', 'Video Door Security',
     'Visitor Parking', 'Volleyball Court', 'Waiting Lounge', 'Wall Climbing',
     'Water Conservation', 'Rain water Harvesting', 'Water Softener Plant', 'Water Sports',
-    'Water Storage', 'Water Supply', 'Yoga/ Meditation Area', 'Zebra Crossing'
+    'Water Storage', 'Water Supply', 'Yoga/ Meditation Area', 'Zebra Crossing', 'Others'
+  ];
+
+  const PAYMENT_PLAN_MASTER = [
+    'Construction Linked Payment (CLP)',
+    'Time Linked Payment (TLP)',
+    'Subvention Scheme',
+    'Down Payment',
   ];
 
   GM_addStyle(`
@@ -396,6 +403,10 @@
       'amenities': [
         'amenities type', 'amenity type', 'amenities sub type',
         'amenities subtype', 'amenities image type'
+      ],
+      'payment plan': [
+        'payment plan type', 'payment type', 'payment plan sub type',
+        'payment plan subtype', 'payment plan category'
       ]
     };
     for (const v of (labelMap[c] || [])) {
@@ -406,6 +417,7 @@
     // Strategy 3: any visible non-excluded select with options matching the master list.
     const master = c === 'amenities' ? AMENITIES_MASTER
                  : c === 'main other' ? MAIN_OTHER_MASTER
+                 : c === 'payment plan' ? PAYMENT_PLAN_MASTER
                  : [];
     if (master.length) {
       const masterKeys = new Set(master.map(canonicalKey));
@@ -707,6 +719,7 @@
     const master =
       norm(category) === 'amenities' ? AMENITIES_MASTER :
       norm(category) === 'main other' ? MAIN_OTHER_MASTER :
+      norm(category) === 'payment plan' ? PAYMENT_PLAN_MASTER :
       [];
 
     if (!master.length) return raw;
