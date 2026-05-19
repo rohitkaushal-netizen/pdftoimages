@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PDF Tool → CMS Auto-Fill (Project Plans)
 // @namespace    https://housing.com
-// @version      2.8
+// @version      2.9
 // @description  Auto-fills CMS Project Plans form. Title is left to CMS auto-fill. Supports Main Other Type, Amenities Type, and Construction Status fields.
 // @author       Housing.com
 // @match        https://cms.housing.com/project_plan_add.php*
@@ -773,30 +773,32 @@
     if (!raw) return '';
     const s = String(raw).trim();
 
-    // Already in DD-MM-YYYY
-    if (/^\d{2}-\d{2}-\d{4}$/.test(s)) return s;
-    // DD/MM/YYYY
-    if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) return s.replace(/\//g, '-');
+    // Already YYYY-MM-DD — pass through unchanged
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
 
-    // YYYY-MM-DD → DD-MM-YYYY
-    const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (iso) return `${iso[3]}-${iso[2]}-${iso[1]}`;
+    // DD-MM-YYYY → YYYY-MM-DD
+    const ddmm = s.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+    if (ddmm) return `${ddmm[3]}-${ddmm[2]}-${ddmm[1]}`;
 
-    // YYYY/MM/DD → DD-MM-YYYY
+    // DD/MM/YYYY → YYYY-MM-DD
+    const ddmm2 = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (ddmm2) return `${ddmm2[3]}-${ddmm2[2]}-${ddmm2[1]}`;
+
+    // YYYY/MM/DD → YYYY-MM-DD
     const iso2 = s.match(/^(\d{4})\/(\d{2})\/(\d{2})$/);
-    if (iso2) return `${iso2[3]}-${iso2[2]}-${iso2[1]}`;
+    if (iso2) return `${iso2[1]}-${iso2[2]}-${iso2[3]}`;
 
     // "15 Nov, 2023" or "15 November 2023"
     const m1 = s.match(/(\d{1,2})\s+([A-Za-z]+),?\s+(\d{4})/);
-    if (m1) return `${m1[1].padStart(2,'0')}-${_monthNum(m1[2])}-${m1[3]}`;
+    if (m1) return `${m1[3]}-${_monthNum(m1[2])}-${m1[1].padStart(2,'0')}`;
 
     // "November 2023" or "Nov, 2023" or "Nov 2023" — from 99Acres status_date
     const m2 = s.match(/([A-Za-z]+),?\s+(\d{4})/);
-    if (m2) return `01-${_monthNum(m2[1])}-${m2[2]}`;
+    if (m2) return `${m2[2]}-${_monthNum(m2[1])}-01`;
 
     // "2023-11" (year-month only)
     const m3 = s.match(/^(\d{4})-(\d{2})$/);
-    if (m3) return `01-${m3[2]}-${m3[1]}`;
+    if (m3) return `${m3[1]}-${m3[2]}-01`;
 
     return s;
   }
