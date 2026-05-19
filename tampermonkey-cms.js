@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PDF Tool → CMS Auto-Fill
 // @namespace    https://housing.com
-// @version      1.4
+// @version      1.5
 // @description  Reads images queued by the PDF extraction tool and auto-fills the CMS image upload form one by one — fully automatic.
 // @author       Housing.com
 // @match        https://cms.housing.com/project_img_add.php*
@@ -74,9 +74,11 @@
   const API          = 'https://pdftoimages-ljco.onrender.com';
   const SS_MODE      = '_cms_auto_fill';   // sessionStorage: auto mode active
   const SS_SAVED     = '_cms_just_saved';  // sessionStorage: form was submitted
+  const SS_BCOUNT    = '_cms_batch_count'; // sessionStorage: batch size sent on last submit
 
   // ── STATE ─────────────────────────────────────────────────────────────────────
-  let currentItem     = null;
+  let currentBatch    = [];  // array of items in the current fill group
+  let _batchSentCount = 1;   // how many items were actually sent in the last fillForm call
   let panelEl         = null;
   let launchBtn       = null;
   let autoMode        = false;
@@ -196,6 +198,59 @@
       if (sib) { radios = Array.from(sib.querySelectorAll('input[type="radio"]')); if (radios.length) return radios; }
     }
     return Array.from(document.querySelectorAll('input[type="radio"][name*="reality"],input[type="radio"][name*="image_reality"]'));
+  }
+
+  // Like findInputAfterText but scoped to a specific container element.
+  function findInputAfterTextInEl(needle, container) {
+    needle = needle.toLowerCase().trim();
+    if (!container || !container.textContent.toLowerCase().includes(needle)) return null;
+    const walker = document.createTreeWalker(
+      container, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, null, false
+    );
+    let past = false, node;
+    while ((node = walker.nextNode())) {
+      if (!past && node.nodeType === Node.TEXT_NODE && node.textContent.toLowerCase().includes(needle)) {
+        past = true;
+      } else if (past && node.nodeType === Node.ELEMENT_NODE) {
+        const t = node.tagName, type = (node.type || '').toLowerCase();
+        if (t === 'SELECT') return node;
+        if ((t === 'INPUT' || t === 'TEXTAREA') && type !== 'file' && type !== 'radio' && type !== 'checkbox' && type !== 'hidden') return node;
+      }
+    }
+    return null;
+  }
+
+  // Find the "How many files would you like to upload?" select.
+  function findHowManyFilesSelect() {
+    return findBySiblingCell('how many')
+        || findInputAfterText('how many', 'td,th,tr')
+        || Array.from(document.querySelectorAll('select')).find(s => {
+             const row = s.closest('tr,div') || s.parentElement;
+             return row && row.textContent.toLowerCase().includes('how many');
+           }) || null;
+  }
+
+  // Wait until the form has at least n file inputs (CMS rerenders after changing the count dropdown).
+  async function waitForFileSlots(n, timeoutMs = 3000) {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      if (document.querySelectorAll('input[type="file"]').length >= n) return true;
+      await new Promise(r => setTimeout(r, 150));
+    }
+    return false;
+  }
+
+  // Return the smallest DOM container that holds exactly the ith file input (and its sibling fields).
+  function findSlotContainer(i) {
+    const fileInputs = Array.from(document.querySelectorAll('input[type="file"]'));
+    if (i >= fileInputs.length) return null;
+    const fi = fileInputs[i];
+    let el = fi.parentElement;
+    while (el && el !== document.body) {
+      if (el.querySelectorAll('input[type="file"]').length === 1) return el;
+      el = el.parentElement;
+    }
+    return fi.closest('tr') || fi.parentElement;
   }
 
   // ── DATE HELPERS ──────────────────────────────────────────────────────────────
@@ -334,13 +389,13 @@
 
   // ── QUEUE FLOW ────────────────────────────────────────────────────────────────
   async function fetchNext(autoFill) {
-    setStatus('Loading next image…');
+    setStatus('Loading next batch…');
     try {
-      const data = await apiGet('/cms-queue/next');
+      const data = await apiGet('/cms-queue/next-batch');
       if (data.done) {
         setStatus('✓ All done! Queue is empty.');
         sessionStorage.removeItem(SS_MODE);
-        currentItem = null;
+        currentBatch = [];
         if (panelEl) {
           ['_cms_qfile','_cms_qcat','_cms_qsrc','_cms_qreal','_cms_qtitle']
             .forEach(id => document.getElementById(id).textContent = '—');
@@ -351,12 +406,12 @@
         }
         return;
       }
-      currentItem    = data.item;
-      queueRemaining = data.remaining; // track so fillForm knows Add More vs Save
-      updatePanelInfo(data.item, data.index, data.total);
+      currentBatch   = data.items;
+      queueRemaining = data.remaining;
+      updatePanelInfo(data.items, data.index, data.total);
       if (autoFill) {
-        await new Promise(r => setTimeout(r, 300)); // let DOM settle
-        await fillForm(data.item);
+        await new Promise(r => setTimeout(r, 300));
+        await fillForm(data.items);
       }
     } catch (e) {
       setStatus('⚠ ' + e.message);
@@ -365,7 +420,7 @@
 
   async function markDone() {
     setStatus('Marking done…');
-    await apiPost('/cms-queue/done');
+    await apiPost('/cms-queue/done', {count: _batchSentCount});
     await fetchNext(autoMode);
   }
 
@@ -418,23 +473,23 @@
   }
 
   // ── FORM FILLING ──────────────────────────────────────────────────────────────
-  async function fillForm(item) {
+  async function fillForm(items) {
+    if (!Array.isArray(items)) items = [items];
+    const item = items[0]; // primary item — shared fields (type, source)
     setStatus('Filling form…');
     const debug = [];
 
-    // ── Step 1: Image Type first — CMS JS may show secondary dropdown and auto-fill Title
+    // ── Step 1: Image Type ────────────────────────────────────────────────────────
     const typeEl  = findField('image type') || findImageTypeSelectFallback();
     const cmsType = IMAGE_TYPE_MAP[item.category] || item.category;
     let typeOk = false;
     if (typeEl) {
       typeOk = setSelect(typeEl, cmsType);
       debug.push([typeOk, typeOk ? `Image Type → "${cmsType}"` : `"${cmsType}" not in dropdown — options: [${Array.from(typeEl.options).map(o=>o.text).join(', ')}]`]);
-
-      // ── Step 2: Wait for CMS JS to react (secondary dropdown, title auto-fill)
       await new Promise(r => setTimeout(r, 500));
 
-      // ── Step 3: Secondary dropdown (Amenities / Main Other sub-type) ──────────
-      if (item.subtype) {
+      // Secondary dropdown only for single-item mode
+      if (items.length === 1 && item.subtype) {
         const subEl = findSecondaryDropdown(typeEl);
         if (subEl) {
           const ok2 = setSelect(subEl, item.subtype);
@@ -448,15 +503,36 @@
       await new Promise(r => setTimeout(r, 500));
     }
 
-    // ── Step 4: Image URL (preview link from local server) ───────────────────────
-    const imgUrlEl = findBySiblingCell('image url') || findInputAfterText('image url', 'td');
-    if (imgUrlEl && item.session_id && item.id) {
-      const previewUrl = `${API}/image/${item.session_id}/${item.id}`;
-      const ok = setInput(imgUrlEl, previewUrl);
-      debug.push([ok, ok ? `Image URL → "${previewUrl}"` : 'Image URL field not filled']);
+    // ── Step 2: How many files (batch mode) ───────────────────────────────────────
+    let effectiveBatch = items;
+    if (items.length > 1) {
+      const howManyEl = findHowManyFilesSelect();
+      if (howManyEl) {
+        const ok = setSelect(howManyEl, String(items.length));
+        if (ok) {
+          debug.push([true, `Batch size → ${items.length} files`]);
+          const ready = await waitForFileSlots(items.length);
+          if (!ready) debug.push([false, `Timeout waiting for ${items.length} file slots`]);
+        } else {
+          // Dropdown doesn't have our count — find the highest available option
+          const maxOpt = Math.max(...Array.from(howManyEl.options)
+            .map(o => parseInt(o.value || o.text) || 0).filter(n => n > 0));
+          if (maxOpt > 1 && setSelect(howManyEl, String(maxOpt))) {
+            effectiveBatch = items.slice(0, maxOpt);
+            debug.push([true, `Batch capped → ${maxOpt} files (dropdown max)`]);
+            await waitForFileSlots(maxOpt);
+          } else {
+            effectiveBatch = [items[0]];
+            debug.push([false, `"${items.length}" not in How Many dropdown — uploading first only`]);
+          }
+        }
+      } else {
+        effectiveBatch = [items[0]];
+        debug.push([false, '"How many files" dropdown not found — uploading first only']);
+      }
     }
 
-    // ── Step 5: Source ────────────────────────────────────────────────────────────
+    // ── Step 3: Source (shared across all slots) ──────────────────────────────────
     const srcEl  = findField('source');
     const cmsSrc = SOURCE_MAP[item.source] || item.source;
     if (srcEl) {
@@ -466,86 +542,103 @@
       debug.push([false, 'Source field not found']);
     }
 
-    // ── Step 6: Image Reality ─────────────────────────────────────────────────────
-    const radios  = findRadiosByLabel('image reality');
-    const reality = item.image_reality || 'Actual';
-    if (radios.length) {
-      const ok = setRadio(radios, reality);
-      debug.push([ok, ok ? `Reality → "${reality}"` : `"${reality}" radio not matched`]);
-    } else {
-      debug.push([false, 'Image Reality radios not found']);
-    }
+    // ── Steps 4–8: Fill each file slot ───────────────────────────────────────────
+    for (let i = 0; i < effectiveBatch.length; i++) {
+      const it        = effectiveBatch[i];
+      const container = findSlotContainer(i);
+      const pfx       = effectiveBatch.length > 1 ? `[${i+1}] ` : '';
 
-    // ── Step 7: Title — set AFTER delay so it overrides any CMS auto-fill ────────
-    const titleEl  = findInputAfterText('title', 'td') || findField('title');
-    const titleVal = item.title || '';
-    if (titleEl && titleEl.type !== 'file') {
-      setInput(titleEl, titleVal);
-      // Re-apply after another tick in case CMS JS overwrites it asynchronously
-      setTimeout(() => { if (titleEl.value !== titleVal) setInput(titleEl, titleVal); }, 400);
-      debug.push([true, `Title → "${titleVal}"`]);
-    } else {
-      debug.push([false, 'Title field not found']);
-    }
-
-    // ── Step 7.5: Tagged Date (Construction Status only) ─────────────────────────
-    if (item.status_date) {
-      const dateEl = findBySiblingCell('tagged date') || findInputAfterText('tagged date', 'td');
-      if (dateEl) {
-        const iso = parseStatusDate(item.status_date);
-        const ok  = setInput(dateEl, iso || item.status_date);
-        debug.push([ok, ok ? `Tagged Date → "${iso || item.status_date}"` : 'Tagged Date field not filled']);
+      // Image Reality
+      const realityRadios = container
+        ? Array.from(container.querySelectorAll('input[type="radio"]'))
+        : findRadiosByLabel('image reality');
+      const reality = it.image_reality || 'Actual';
+      if (realityRadios.length) {
+        const ok = setRadio(realityRadios, reality);
+        debug.push([ok, ok ? `${pfx}Reality → "${reality}"` : `${pfx}Reality radio not matched`]);
       } else {
-        debug.push([false, 'Tagged Date field not found']);
+        debug.push([false, `${pfx}Image Reality radios not found`]);
       }
-    }
 
-    // ── Step 8: Fetch image, convert webp→jpeg if needed, inject into file input ─
-    const fileInputEl = document.querySelector('input[type="file"]');
-    if (fileInputEl && item.session_id && item.id) {
-      setStatus('Downloading image…');
-      try {
-        let buf      = await fetchImageBuffer(item.session_id, item.id);
-        let filename = item.filename || (item.id + '.jpg');
+      // Image URL
+      const urlEl = container
+        ? findInputAfterTextInEl('image url', container)
+        : (findBySiblingCell('image url') || findInputAfterText('image url', 'td'));
+      if (urlEl && it.session_id && it.id) {
+        setInput(urlEl, `${API}/image/${it.session_id}/${it.id}`);
+        debug.push([true, `${pfx}Image URL → set`]);
+      }
 
-        // Convert webp (and any unsupported format) to JPEG — CMS only accepts gif/png/jpg
-        if (/\.webp$/i.test(filename) || /\.avif$/i.test(filename)) {
-          setStatus('Converting to JPEG…');
-          try {
-            const conv = await convertToJpeg(buf, filename);
-            buf      = conv.buffer;
-            filename = conv.filename;
-            debug.push([true, `Converted → ${filename}`]);
-          } catch (e) {
-            debug.push([false, `WebP→JPEG failed: ${e.message} — CMS may reject file`]);
-          }
+      // Title
+      const titleEl = container
+        ? findInputAfterTextInEl('title', container)
+        : (findInputAfterText('title', 'td') || findField('title'));
+      const titleVal = it.title || '';
+      if (titleEl && titleEl.type !== 'file') {
+        setInput(titleEl, titleVal);
+        setTimeout(() => { if (titleEl.value !== titleVal) setInput(titleEl, titleVal); }, 400);
+        debug.push([true, `${pfx}Title → "${titleVal}"`]);
+      } else {
+        debug.push([false, `${pfx}Title field not found`]);
+      }
+
+      // Tagged Date (Construction Status only)
+      if (it.status_date) {
+        const dateEl = container
+          ? findInputAfterTextInEl('tagged date', container)
+          : (findBySiblingCell('tagged date') || findInputAfterText('tagged date', 'td'));
+        if (dateEl) {
+          const iso = parseStatusDate(it.status_date);
+          const ok  = setInput(dateEl, iso || it.status_date);
+          debug.push([ok, ok ? `${pfx}Tagged Date → "${iso || it.status_date}"` : `${pfx}Tagged Date not filled`]);
+        } else {
+          debug.push([false, `${pfx}Tagged Date field not found`]);
         }
-
-        const ok = injectFile(fileInputEl, buf, filename);
-        debug.push([ok, ok ? `File ready: ${filename}` : 'File inject failed — upload manually']);
-        setStatus(ok ? 'Form filled — review & click Save' : '⚠ File inject failed — upload manually then click Save');
-      } catch (e) {
-        debug.push([false, `Image download failed: ${e.message}`]);
-        setStatus('⚠ Image download failed — upload file manually');
       }
-    } else {
-      debug.push([false, 'No file input found on page']);
-      setStatus('Form filled (no file input found)');
+
+      // File — download, convert webp→jpeg if needed, inject
+      const fileInputEl = container
+        ? container.querySelector('input[type="file"]')
+        : document.querySelector('input[type="file"]');
+      if (fileInputEl && it.session_id && it.id) {
+        setStatus(`${pfx}Downloading image…`);
+        try {
+          let buf      = await fetchImageBuffer(it.session_id, it.id);
+          let filename = it.filename || (it.id + '.jpg');
+          if (/\.webp$/i.test(filename) || /\.avif$/i.test(filename)) {
+            setStatus(`${pfx}Converting to JPEG…`);
+            try {
+              const conv = await convertToJpeg(buf, filename);
+              buf = conv.buffer; filename = conv.filename;
+              debug.push([true, `${pfx}Converted → ${filename}`]);
+            } catch (e) {
+              debug.push([false, `${pfx}WebP→JPEG failed: ${e.message}`]);
+            }
+          }
+          const ok = injectFile(fileInputEl, buf, filename);
+          debug.push([ok, ok ? `${pfx}File: ${filename}` : `${pfx}File inject failed — upload manually`]);
+        } catch (e) {
+          debug.push([false, `${pfx}Image download failed: ${e.message}`]);
+        }
+      } else {
+        debug.push([false, `${pfx}No file input found`]);
+      }
     }
+
+    // Record how many items were actually submitted so markDone advances correctly
+    _batchSentCount = effectiveBatch.length;
 
     setDebug(debug);
 
-    // ── Step 9: Auto-click Add More / Save ────────────────────────────────────────
+    // ── Auto-click Add More / Save ─────────────────────────────────────────────────
     if (autoMode) {
-      const fileOk  = debug.some(([ok, msg]) => ok && msg.includes('File'));
-      const typeOk  = debug.some(([ok, msg]) => ok && msg.includes('Image Type'));
-      const allGood = fileOk && typeOk;
-
+      const fileOkCount = debug.filter(([ok, msg]) => ok && msg.includes('File:')).length;
+      const allGood = fileOkCount >= effectiveBatch.length
+                   && debug.some(([ok, msg]) => ok && msg.includes('Image Type'));
       if (allGood) {
-        const isLast  = queueRemaining <= 1;
+        const isLast  = queueRemaining <= effectiveBatch.length;
         const btn     = isLast ? findSaveBtn() : findAddMoreBtn();
         const btnName = isLast ? 'Save' : 'Add More';
-
         if (btn) {
           let secs = 3;
           setStatus(`Clicking "${btnName}" in ${secs}s — click Stop to cancel`);
@@ -566,6 +659,10 @@
       } else {
         setStatus('⚠ Image Type or File failed — fix manually, then click Add More / Save');
       }
+    } else {
+      setStatus(effectiveBatch.length > 1
+        ? `${effectiveBatch.length} files filled — review & click Save`
+        : 'Form filled — review & click Save');
     }
 
     attachFormListeners();
@@ -596,8 +693,9 @@
 
     // Traditional submit (page reload) — keep sessionStorage flag alive
     form.addEventListener('submit', () => {
-      sessionStorage.setItem(SS_SAVED, '1');
-      sessionStorage.setItem(SS_MODE,  '1');
+      sessionStorage.setItem(SS_SAVED,  '1');
+      sessionStorage.setItem(SS_MODE,   '1');
+      sessionStorage.setItem(SS_BCOUNT, String(_batchSentCount));
     });
 
     // AJAX "Add More": detect form reset without page navigation
@@ -605,23 +703,20 @@
     if (addMoreBtn) {
       addMoreBtn.addEventListener('click', () => {
         if (!autoMode) return;
-        // Watch for the Image Type select to be reset (= form cleared by AJAX)
         const typeEl = findField('image type') || findImageTypeSelectFallback();
         if (!typeEl) return;
         const originalIndex = typeEl.selectedIndex;
+        const sentCount = _batchSentCount; // capture before async reset
         const poll = setInterval(async () => {
           if (typeEl.selectedIndex !== originalIndex || typeEl.selectedIndex <= 0) {
             clearInterval(poll);
             if (!sessionStorage.getItem(SS_SAVED)) {
-              // AJAX reset confirmed — mark done and fill next (no page reload)
               setStatus('Form submitted via AJAX — loading next…');
-              await apiPost('/cms-queue/done');
+              await apiPost('/cms-queue/done', {count: sentCount});
               await fetchNext(true);
             }
-            // If SS_SAVED is set the page is navigating — init() will handle it
           }
         }, 300);
-        // Stop polling after 5s (page reload will take over)
         setTimeout(() => clearInterval(poll), 5000);
       });
     }
@@ -641,15 +736,21 @@
     ).join('');
   }
 
-  function updatePanelInfo(item, index, total) {
+  function updatePanelInfo(items, index, total) {
     if (!panelEl) return;
+    const item     = items[0];
+    const n        = items.length;
     const catLabel = item.subtype ? `${item.category} › ${item.subtype}` : (item.category || '—');
-    document.getElementById('_cms_qfile').textContent  = item.filename || '—';
+    document.getElementById('_cms_qfile').textContent  = n > 1 ? `${n} files (batch)` : (item.filename || '—');
     document.getElementById('_cms_qcat').textContent   = catLabel;
     document.getElementById('_cms_qsrc').textContent   = SOURCE_MAP[item.source] || item.source || '—';
     document.getElementById('_cms_qreal').textContent  = item.image_reality || 'Actual';
-    document.getElementById('_cms_qtitle').textContent = item.title || '—';
-    document.getElementById('_cms_progress').textContent = `Item ${index + 1} of ${total}`;
+    document.getElementById('_cms_qtitle').textContent = n > 1
+      ? items.map(i => i.title).filter(Boolean).join(' / ') || '—'
+      : (item.title || '—');
+    document.getElementById('_cms_progress').textContent = n > 1
+      ? `Items ${index + 1}–${index + n} of ${total}`
+      : `Item ${index + 1} of ${total}`;
     document.getElementById('_cms_debug').innerHTML = '';
     setStatus('Auto-filling form…');
   }
@@ -698,11 +799,11 @@
     });
     document.getElementById('_cms_btn_fill').addEventListener('click', () => {
       if (autoClickTimer) { clearInterval(autoClickTimer); autoClickTimer = null; }
-      if (currentItem) fillForm(currentItem);
+      if (currentBatch.length) fillForm(currentBatch);
     });
     document.getElementById('_cms_btn_done').addEventListener('click', () => markDone());
     document.getElementById('_cms_btn_skip').addEventListener('click', () => {
-      apiPost('/cms-queue/skip').then(() => fetchNext(autoMode));
+      apiPost('/cms-queue/done', {count: currentBatch.length || 1}).then(() => fetchNext(autoMode));
     });
     document.getElementById('_cms_btn_stop').addEventListener('click', () => {
       autoMode = false;
@@ -783,7 +884,9 @@
       } else {
         // No error banner → save was successful → advance queue
         setStatus('✓ Saved! Marking done…');
-        await apiPost('/cms-queue/done');
+        const savedCount = parseInt(sessionStorage.getItem(SS_BCOUNT) || '1') || 1;
+        sessionStorage.removeItem(SS_BCOUNT);
+        await apiPost('/cms-queue/done', {count: savedCount});
       }
     }
 

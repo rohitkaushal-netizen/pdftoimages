@@ -1529,10 +1529,15 @@ async def cms_queue_next():
     }
 
 
+class DoneRequest(BaseModel):
+    count: int = 1
+
+
 @app.post("/cms-queue/done")
-async def cms_queue_done():
+async def cms_queue_done(body: DoneRequest = None):
     global _cms_pos
-    _cms_pos = min(_cms_pos + 1, len(_cms_queue))
+    n = (body.count if body else 1) or 1
+    _cms_pos = min(_cms_pos + n, len(_cms_queue))
     return {
         "pos": _cms_pos,
         "remaining": max(0, len(_cms_queue) - _cms_pos),
@@ -1541,9 +1546,36 @@ async def cms_queue_done():
 
 
 @app.post("/cms-queue/skip")
-async def cms_queue_skip():
-    """Skip current item without marking it done — advances same as /done."""
-    return await cms_queue_done()
+async def cms_queue_skip(body: DoneRequest = None):
+    """Skip current batch without marking it done — advances same as /done."""
+    return await cms_queue_done(body)
+
+
+@app.get("/cms-queue/next-batch")
+async def cms_queue_next_batch():
+    """Return a batch of consecutive queue items that share the same category+subtype."""
+    if _cms_pos >= len(_cms_queue):
+        return {"done": True, "remaining": 0, "total": len(_cms_queue), "items": []}
+    first = _cms_queue[_cms_pos]
+    batch_key = (first.get("category", ""), first.get("subtype", ""))
+    MAX_BATCH = 10
+    batch: list[dict] = []
+    i = _cms_pos
+    while i < len(_cms_queue) and len(batch) < MAX_BATCH:
+        item = _cms_queue[i]
+        if (item.get("category", ""), item.get("subtype", "")) == batch_key:
+            batch.append(item)
+            i += 1
+        else:
+            break
+    return {
+        "done": False,
+        "items": batch,
+        "batch_size": len(batch),
+        "index": _cms_pos,
+        "total": len(_cms_queue),
+        "remaining": len(_cms_queue) - _cms_pos,
+    }
 
 
 @app.get("/cms-queue/status")
