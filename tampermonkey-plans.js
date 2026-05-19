@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PDF Tool → CMS Auto-Fill (Project Plans)
 // @namespace    https://housing.com
-// @version      2.9
+// @version      3.0
 // @description  Auto-fills CMS Project Plans form. Title is left to CMS auto-fill. Supports Main Other Type, Amenities Type, and Construction Status fields.
 // @author       Housing.com
 // @match        https://cms.housing.com/project_plan_add.php*
@@ -18,18 +18,20 @@
 
   const API = 'https://pdftoimages-ljco.onrender.com';
 
-  const SS_MODE = '_cms_plan_auto_fill';
-  const SS_SAVED = '_cms_plan_just_saved';
-  const SS_PENDING = '_cms_plan_submit_pending';
+  const SS_MODE       = '_cms_plan_auto_fill';
+  const SS_SAVED      = '_cms_plan_just_saved';
+  const SS_PENDING    = '_cms_plan_submit_pending';
   const SS_LAST_ACTION = '_cms_plan_last_action';
+  const SS_BCOUNT     = '_cms_plan_batch_count';
 
-  let currentItem = null;
-  let panelEl = null;
-  let launchBtn = null;
-  let autoMode = false;
-  let queueRemaining = 0;
-  let autoClickTimer = null;
-  let ajaxPollTimer = null;
+  let currentItem        = null;
+  let _planBatchSentCount = 1;   // items actually sent in the last fillPlanForm call
+  let panelEl            = null;
+  let launchBtn          = null;
+  let autoMode           = false;
+  let queueRemaining     = 0;
+  let autoClickTimer     = null;
+  let ajaxPollTimer      = null;
 
   const MAIN_OTHER_MASTER = [
     'Living Area',
@@ -1042,12 +1044,17 @@
   function updatePanelInfo(item, index, total) {
     if (!panelEl) return;
     const category = getEffectiveCategory(item) || item.category || '—';
-    document.getElementById('_cms_qfile').textContent = item.filename || '—';
-    document.getElementById('_cms_qcat').textContent = category;
-    document.getElementById('_cms_qsrc').textContent = item.source || '—';
-    document.getElementById('_cms_qreal').textContent = item.image_reality || 'Actual';
-    document.getElementById('_cms_qtitle').textContent = stripExtension(item.filename || '') || '—';
-    document.getElementById('_cms_progress').textContent = `Item ${index + 1} of ${total}`;
+    const n = item.group_items?.length || 1;
+    document.getElementById('_cms_qfile').textContent  = n > 1 ? `${n} files (batch)` : (item.filename || '—');
+    document.getElementById('_cms_qcat').textContent   = category;
+    document.getElementById('_cms_qsrc').textContent   = item.source || '—';
+    document.getElementById('_cms_qreal').textContent  = item.image_reality || 'Actual';
+    document.getElementById('_cms_qtitle').textContent = n > 1
+      ? item.group_items.map(i => stripExtension(i.filename || '')).join(' / ')
+      : stripExtension(item.filename || '') || '—';
+    document.getElementById('_cms_progress').textContent = n > 1
+      ? `Items ${index + 1}–${index + n} of ${total}`
+      : `Item ${index + 1} of ${total}`;
     document.getElementById('_cms_debug').innerHTML = '';
   }
 
@@ -1110,7 +1117,8 @@
     });
 
     document.getElementById('_cms_btn_skip').addEventListener('click', async () => {
-      await apiPost('/cms-queue/skip');
+      const n = currentItem?.group_items?.length || 1;
+      await apiPost('/cms-queue/done', {count: n});
       await fetchNext(autoMode);
     });
 
@@ -1152,17 +1160,17 @@
 
   async function markDone() {
     setStatus('Marking done…');
-    await apiPost('/cms-queue/done');
+    await apiPost('/cms-queue/done', {count: _planBatchSentCount || 1});
     await fetchNext(autoMode);
   }
 
   async function fetchNext(autoFill) {
-    setStatus('Loading next queue item…');
+    setStatus('Loading next batch…');
 
     try {
-      const data = await apiGet('/cms-queue/next');
+      const data = await apiGet('/cms-queue/next-batch');
 
-      if (data.done || !data.item) {
+      if (data.done || !data.items || !data.items.length) {
         setStatus('✓ Queue complete');
         sessionStorage.removeItem(SS_MODE);
         clearSubmitFlags();
@@ -1178,13 +1186,19 @@
         return;
       }
 
-      currentItem = data.item;
+      // Wrap batch into a single item so existing fillPlanForm groupItems logic works
+      const primary = data.items[0];
+      const batchItem = data.items.length > 1
+        ? { ...primary, group_items: data.items, group_size: data.items.length }
+        : primary;
+
+      currentItem    = batchItem;
       queueRemaining = data.remaining;
-      updatePanelInfo(data.item, data.index, data.total);
+      updatePanelInfo(batchItem, data.index, data.total);
 
       if (autoFill) {
         await sleep(300);
-        await fillPlanForm(data.item);
+        await fillPlanForm(batchItem);
       }
     } catch (e) {
       setStatus('⚠ ' + e.message);
@@ -1218,7 +1232,7 @@
 
         try {
           setStatus('✓ Saved! Marking queue item done…');
-          await apiPost('/cms-queue/done');
+          await apiPost('/cms-queue/done', {count: _planBatchSentCount || 1});
 
           if (action === 'add_more') {
             await fetchNext(true);
@@ -1238,9 +1252,10 @@
     form._cmsPlansWatched = true;
 
     form.addEventListener('submit', () => {
-      sessionStorage.setItem(SS_SAVED, '1');
+      sessionStorage.setItem(SS_SAVED,  '1');
       sessionStorage.setItem(SS_PENDING, '1');
-      sessionStorage.setItem(SS_MODE, '1');
+      sessionStorage.setItem(SS_MODE,   '1');
+      sessionStorage.setItem(SS_BCOUNT, String(_planBatchSentCount || 1));
     });
 
     const addMoreBtn = findAddMoreBtn();
@@ -1425,6 +1440,9 @@
       }
     }
 
+    // Record how many items were actually processed so markDone advances correctly
+    _planBatchSentCount = fillableCount;
+
     setDebug(debug);
     attachFormListeners();
 
@@ -1489,6 +1507,7 @@
 
       if (pageHasCmsError()) {
         clearSubmitFlags();
+        sessionStorage.removeItem(SS_BCOUNT);
         setStatus('⚠ CMS save error detected — same item will be re-filled.');
         await fetchNext(true);
         return;
@@ -1496,7 +1515,9 @@
 
       try {
         setStatus('✓ Previous save detected. Marking done…');
-        await apiPost('/cms-queue/done');
+        const savedCount = parseInt(sessionStorage.getItem(SS_BCOUNT) || '1') || 1;
+        sessionStorage.removeItem(SS_BCOUNT);
+        await apiPost('/cms-queue/done', {count: savedCount});
         clearSubmitFlags();
       } catch (e) {
         setStatus('⚠ ' + e.message);
@@ -1511,16 +1532,21 @@
     autoMode = false;
     if (!panelEl) createPanel();
 
-    const data = await apiGet('/cms-queue/next');
-    if (data.done || !data.item) {
+    const data = await apiGet('/cms-queue/next-batch');
+    if (data.done || !data.items || !data.items.length) {
       setStatus('Queue empty');
       return;
     }
 
-    currentItem = data.item;
+    const primary = data.items[0];
+    const batchItem = data.items.length > 1
+      ? { ...primary, group_items: data.items, group_size: data.items.length }
+      : primary;
+
+    currentItem    = batchItem;
     queueRemaining = data.remaining;
-    updatePanelInfo(data.item, data.index, data.total);
-    await fillPlanForm(data.item);
+    updatePanelInfo(batchItem, data.index, data.total);
+    await fillPlanForm(batchItem);
   };
 
   init();
