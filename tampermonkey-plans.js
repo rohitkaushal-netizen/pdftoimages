@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PDF Tool → CMS Auto-Fill (Project Plans)
 // @namespace    https://housing.com
-// @version      2.7
+// @version      2.8
 // @description  Auto-fills CMS Project Plans form. Title is left to CMS auto-fill. Supports Main Other Type, Amenities Type, and Construction Status fields.
 // @author       Housing.com
 // @match        https://cms.housing.com/project_plan_add.php*
@@ -888,6 +888,12 @@
     if (mime === 'image/png') return { buffer, filename: ensureExt(filename, '.png'), mime, converted: false };
     if (mime === 'image/gif') return { buffer, filename: ensureExt(filename, '.gif'), mime, converted: false };
 
+    // Guard: if the first bytes look like JSON ({) or HTML (<), this is an error response, not an image.
+    const firstByte = new Uint8Array(buffer.slice(0, 1))[0];
+    if (firstByte === 0x7B || firstByte === 0x3C) {
+      throw new Error('Server returned an error page — session may have expired, re-scrape');
+    }
+
     return convertToJpeg(buffer, filename || 'image.jpg');
   }
 
@@ -946,7 +952,15 @@
         method: 'GET',
         url: `${API}/image/${sessionId}/${imageId}`,
         responseType: 'arraybuffer',
-        onload: r => r.response ? resolve(r.response) : reject(new Error('Empty response')),
+        onload: r => {
+          if (r.status !== 200) {
+            reject(new Error(`HTTP ${r.status} — session may have expired, re-scrape`));
+          } else if (!r.response || r.response.byteLength < 100) {
+            reject(new Error('Empty or truncated response'));
+          } else {
+            resolve(r.response);
+          }
+        },
         onerror: () => reject(new Error('Image download failed'))
       });
     });
